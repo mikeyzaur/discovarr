@@ -4,10 +4,9 @@ Outcomes from the concept grilling. Records *what we settled and why*, so the ha
 open assumptions don't get silently re-litigated.
 
 ## Build spine
-**Step 0** trailer spike ✅ → **Step 1** full backend + all four APIs (TMDB, MDBList, Trakt,
-Seerr) wired together → **Step 2** theatre frontend → **Step 3** deploy (Caddy + Pi-hole +
-Tailscale). Decided *not* to stage the APIs — bring the whole data layer in at Step 1 rather
-than half-building it.
+**Step 0** trailer spike ✅ → **Step 1** full backend + all four APIs ✅ → **Step 2** theatre
+frontend → **Step 3** deploy (Caddy + Pi-hole + Tailscale). Decided *not* to stage the APIs —
+bring the whole data layer in at Step 1 rather than half-building it.
 
 ## Step 0 — DONE (verified on desktop Firefox + iPhone Safari over LAN)
 All four verdicts passed:
@@ -23,6 +22,22 @@ All four verdicts passed:
    the safety net if it ever happens.
 
 The concept is de-risked. Spike lives in `trailer-test/` (throwaway probe, not app code).
+
+## Step 1 — DONE (backend verified live on the arr-stack host)
+All four upstreams working end to end (`discovarr-api`, port 8001):
+- `/api/health` all 200; `/api/title/{id}` returns the full tile contract incl. ratings
+  (`imdb · rt_critic · rt_audience · metacritic · trakt`); `/api/themes` returns Trakt
+  Trending + the `book-to-movie` MDBList list + the generated TMDB-Discover reel.
+- Trakt OAuth authed (device flow), watchlist + watched-exclusion live, tokens auto-refresh.
+
+**Operational gotchas discovered (durable):**
+- **MDBList ratings** = `/{provider}/{type}/{id}` (e.g. `/imdb/show/{id}`), type must match
+  (`imdb/movie` of a show id → 404). The root `?i=` form is the API landing page, not data.
+- **The persistent SQLite cache masks code changes** — a rebuild won't show a fix until the
+  cached entry's TTL expires. Bypass with `POST /api/admin/flush` or `?fresh=1` on `/api/title`.
+- **Compose project name pinned to `discovarr`** (+ volume `discovarr_db`) — the `app/` dir
+  otherwise derives project `app` and collides with homelab-dashboard (shared project →
+  `down --remove-orphans` cross-nuke risk).
 
 ## Sound / autoplay  *(the load-bearing UX decision)*
 - **Start splash button** is the entry point. That single tap banks the browser user-gesture →

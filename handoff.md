@@ -12,43 +12,54 @@ single-file frontend). LAN/Tailscale only, never public.
 
 ## Current state
 
-**Step 0 — DONE & signed off** (commits `df4779e`→`fdc784b`). Standalone trailer spike
-(`trailer-test/`) verified on desktop Firefox **and iPhone Safari**: all four verdicts pass,
-incl. the two scary ones — **sound-on autoplay after one Start-button gesture on iOS**, and
-**auto-advance keeps sound on iOS**. Concept de-risked. (Spike is throwaway, not app code.)
+**Step 0 — DONE.** Trailer spike (`trailer-test/`) verified on desktop + iPhone: sound-on
+autoplay after one Start gesture and auto-advance-keeps-sound, both on iOS. Concept de-risked.
 
-**Step 1 — SCAFFOLDED, untested against live keys** (this session). Full backend under
-`app/` in the dashboard shape. Compiles clean (`py_compile`), but NO real API keys yet, so
-the upstream calls are written-from-docs, not curl-verified. **This is the next job:**
-provision keys → `curl` each endpoint on the host → fix any 4xx in the upstream shapes
-(MDBList list endpoint + Trakt sync bodies are the likeliest to need a tweak).
+**Step 1 — DONE & VERIFIED ON THE HOST.** Backend live in `app/` on arr-stack
+(`discovarr-api`, port 8001). All four upstreams working end to end:
+- `/api/health` → all 200 (now hits real MDBList endpoint, not its landing page).
+- `/api/title/{id}` → full tile contract incl. **ratings** (`imdb 9.5 · rt_critic 96 ·
+  rt_audience 97 · metacritic · trakt`) merged from TMDB + MDBList.
+- `/api/themes` → Trakt Trending + the `book-to-movie` MDBList list + the generated reel
+  (TMDB Discover: "1980s Sci-Fi", "2020s Crime", …) all populating.
+- **Trakt OAuth authed** (device flow), watchlist + watched-exclusion active, tokens in
+  SQLite w/ auto-refresh.
+- Seerr request path wired (not yet exercised with a real request).
 
 **Step 2** (theatre frontend) and **Step 3** (deploy: Caddy `discov.arr` route in arr-stack
-repo + Pi-hole record + Tailscale DNS bounce) — not started.
+repo + Pi-hole record + Tailscale DNS bounce) — NOT started. This is the next work.
 
-## Next steps (Step 1 finish)
+## Gotchas learned this session (will bite again)
 
-1. On the host, create `app/.env` from `app/.env.example` (`chmod 600`) with real keys:
-   `TMDB_TOKEN`, `MDBLIST_API_KEY`, `TRAKT_CLIENT_ID`, `TRAKT_CLIENT_SECRET`, `SEERR_API_KEY`.
-2. Fill the two `REPLACE_WITH_AN_MDBLIST_LIST_ID` placeholders in `app/config.toml`.
-3. `docker compose -f app/docker-compose.yml up -d --build`, then verify (handover §9 —
-   build one thing, curl, move on):
-   - `curl localhost:8001/api/health` → status per upstream
-   - `curl "localhost:8001/api/title/1396?type=tv"` → the tile contract (Breaking Bad)
-   - `curl localhost:8001/api/themes` → `{nav, reel}`
-4. **Trakt OAuth (one-time):** `curl -X POST localhost:8001/api/trakt/device` → open the
-   `verification_url`, enter `user_code`, then poll
-   `curl -X POST "localhost:8001/api/trakt/device/poll?device_code=<device_code>"` until
-   `{authorised:true}`. Tokens land in `/data/discovarr.db` and auto-refresh on 401.
+- **MDBList ratings** = RESTful `/{provider}/{type}/{id}` (e.g. `/imdb/show/tt0903747`); the
+  type MUST match (`imdb/movie` of a show id → 404). The root `?i=` form returns the API
+  landing page (200, no data) — that was the empty-`ratings:{}` bug.
+- **The SQLite cache masks code changes.** Title/theme responses are cached in the persistent
+  volume (24h/12h TTL), so a rebuild alone won't show your fix. Use **`POST /api/admin/flush`**
+  or **`GET /api/title/{id}?fresh=1`** to bypass. (This bit us — tiles kept returning stale
+  empty ratings after the fix until the cache was cleared.)
+- **Compose project name** is pinned to `discovarr` (was deriving `app` from the dir and
+  colliding with homelab-dashboard). Volume pinned to `discovarr_db`. Don't let it revert to
+  the dir-derived name or `down --remove-orphans` could cross-nuke the dashboard.
+
+## Open items (small)
+
+- **Award Winners** nav theme still a placeholder `list_id` → returns empty. Wire a real
+  MDBList Oscar/awards list in `config.toml`.
+- **Trakt rating pane** the user liked — surface the Trakt score (already in the MDBList
+  ratings as `trakt`, zero extra calls) and optionally the vote distribution
+  (`/shows/{id}/ratings`, one extra cached call). Confirm which pane before building.
+- Generated reel sometimes returns <10 themes (empty genre×decade combos dropped) — top up if
+  it feels thin.
 
 ## Deploy & verify (inherited dashboard gotchas — these bite)
 
 - Image **bakes `main.py` + `config.toml` + `web/`** — every backend OR frontend edit needs
-  `--build`. No `--reload`. `git pull` without `--build` deploys nothing.
-- After any `.env` change use `up -d` (recreates), **NOT `restart`** (reuses cached config).
+  `--build`. No `--reload`.
+- After any `.env` change use `up -d` (recreates), **NOT `restart`**.
 - `pydantic-settings extra="ignore"` silently drops unmatched env vars — add the `Settings`
-  field in `main.py` FIRST, then the env var.
-- `from __future__ import annotations` must be the first statement after the docstring.
+  field FIRST, then the env var.
+- `from __future__ import annotations` first statement after the docstring.
 - `curl localhost:8001/...` on the host: 500 = handler raised (`docker compose logs
   discovarr-api`); **connection-refused = app failed to *start*** (import/syntax).
 
@@ -56,12 +67,12 @@ repo + Pi-hole record + Tailscale DNS bounce) — not started.
 
 - `app/main.py` — backend: `Settings`, SQLite (`/data/discovarr.db`: cache + excludes + Trakt
   tokens), TMDB/MDBList/Trakt/Seerr clients, tile contract, theme engine (generated reel +
-  standard nav), routes `/api/{health,title/{id},themes,exclude,watchlist,request,
+  standard nav), routes `/api/{health,title/{id},themes,exclude,watchlist,request,admin/flush,
   trakt/device,trakt/device/poll}`, static mount. Use grep, not line numbers.
 - `app/config.toml` — nav (standard) themes, generated genres/decades, rating chips, TTLs,
-  per-theme cap. (Two MDBList list-id placeholders to fill.)
-- `app/{Dockerfile,docker-compose.yml,requirements.txt,.env.example}` — port 8001, container
-  `discovarr-api`, network `arr-stack_media_net` (external), `/data` volume.
+  per-theme cap. (Award Winners `list_id` still a placeholder.)
+- `app/docker-compose.yml` — `name: discovarr`, container `discovarr-api`, port 8001, network
+  `arr-stack_media_net` (external), volume `discovarr_db`.
 - `app/web/index.html` — placeholder; **Step 2 replaces it** with the theatre UI (per the
   player requirements in `DECISIONS.md`: hide title/share via poster-fade, pause on Space +
   remote OK, clean chrome).
