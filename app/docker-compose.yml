@@ -1,3 +1,8 @@
+# Explicit project name — without this, Compose derives it from the `app/` dir
+# and collides with homelab-dashboard (also in an app/ dir). Sharing a project
+# is dangerous: `down --remove-orphans` in one could nuke the other's containers.
+name: discovarr
+
 services:
   discovarr-api:
     build: .
@@ -21,3 +26,4 @@ networks:
 
 volumes:
   discovarr_db:
+    name: discovarr_db   # pinned (no project prefix) so it's stable across renames

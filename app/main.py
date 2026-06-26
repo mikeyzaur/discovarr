@@ -384,11 +384,12 @@ async def trakt_watched_ids() -> set[tuple[int, str]]:
 # ---------------------------------------------------------------------------
 # Tile contract — merge TMDB + MDBList into the ONE shape the frontend knows.
 # ---------------------------------------------------------------------------
-async def build_tile(tmdb_id: int, mtype: MediaType) -> dict:
+async def build_tile(tmdb_id: int, mtype: MediaType, fresh: bool = False) -> dict:
     ckey = f"title:{mtype}:{tmdb_id}"
-    cached = cache_get(ckey)
-    if cached:
-        return cached
+    if not fresh:
+        cached = cache_get(ckey)
+        if cached:
+            return cached
     base = await tmdb_title(tmdb_id, mtype)
     ratings = await mdblist_ratings(base.pop("imdb_id", None), tmdb_id, mtype)
     tile = {
@@ -477,8 +478,18 @@ async def health():
 
 
 @app.get("/api/title/{tmdb_id}")
-async def get_title(tmdb_id: int, type: MediaType = "movie"):
-    return await build_tile(tmdb_id, type)
+async def get_title(tmdb_id: int, type: MediaType = "movie", fresh: bool = False):
+    return await build_tile(tmdb_id, type, fresh=fresh)
+
+
+@app.post("/api/admin/flush")
+async def flush_cache():
+    """Dev convenience: wipe the response cache (title + theme + watched set).
+    Leaves excludes + Trakt tokens intact. The persistent SQLite cache otherwise
+    masks code changes until each entry's TTL expires."""
+    with db() as c:
+        n = c.execute("DELETE FROM cache").rowcount
+    return {"cleared": n}
 
 
 @app.get("/api/themes")
