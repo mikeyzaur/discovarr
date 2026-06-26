@@ -32,7 +32,7 @@ source = "trakt_watchlist"
 id = "book-to-movie"
 label = "From Book to Movie"
 source = "mdblist"
-list_id = "REPLACE_WITH_AN_MDBLIST_LIST_ID"   # e.g. a public "based on a book" list
+list_id = "k0meta/based_on_books_movies"      # https://mdblist.com/lists/k0meta/based_on_books_movies
 
 [[standard_themes]]
 id = "award-winners"
