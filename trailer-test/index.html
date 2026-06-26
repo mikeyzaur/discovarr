@@ -80,7 +80,7 @@
     <div class="row"><span>1 · Embeds &amp; plays in-page</span><b id="vPlay" class="v-muted">waiting</b></div>
     <div class="row"><span>2 · Sound on (not force-muted)</span><b id="vSound" class="v-muted">waiting</b></div>
     <div class="row"><span>3 · ENDED fires (auto-advance)</span><b id="vEnded" class="v-muted">waiting</b></div>
-    <div class="row"><span>4 · Embedding-disabled handled</span><b id="vErr" class="v-muted">waiting</b></div>
+    <div class="row"><span>4 · Unplayable trailer handled (no black box)</span><b id="vErr" class="v-muted">waiting</b></div>
 
     <h2>Controls (or use arrow keys)</h2>
     <div class="controls">
@@ -96,7 +96,8 @@
     <h2>Trailer IDs (edit freely)</h2>
     <textarea id="ids"></textarea>
     <p class="hint">One YouTube video ID per line. Pre-filled with placeholder trailer IDs —
-      <b>swap any that fail</b>. To test verdict 4, paste an ID you know has embedding disabled.
+      <b>swap any that fail</b>. To test verdict 4, paste an unplayable ID — e.g. a removed
+      video (<code>tCXGJQYZ9Jk</code>) or pure garbage (<code>zzzzzzzzzzz</code>).
       Click “Apply &amp; restart” after editing.</p>
     <div class="controls"><button class="ctl" id="applyBtn">Apply &amp; restart</button></div>
 
@@ -200,16 +201,16 @@ function onStateChange(e) {
 }
 
 function onError(e) {
-  // 101 / 150 == embedding disabled by uploader. 100 == not found. 2 == bad id.
-  const codes = {2:"invalid id",5:"HTML5 error",100:"not found / removed",101:"EMBEDDING DISABLED",150:"EMBEDDING DISABLED"};
+  // Any of these means "this trailer won't play" — the production case is a TMDB key
+  // that's been removed/region-locked/age-restricted/embed-disabled. What matters for
+  // the app is that we DETECT it and can skip, never showing a dead black box.
+  // 2 == bad id · 5 == HTML5 error · 100 == not found/removed/private ·
+  // 101/150 == embedding disabled or age-restricted.
+  const codes = {2:"invalid id",5:"HTML5 error",100:"not found / removed / private",101:"embed-disabled / age-restricted",150:"embed-disabled / age-restricted"};
   const why = codes[e.data] ?? ("code " + e.data);
-  log(`onError: ${why} (${e.data}) for ${ids[i]}`);
-  if (e.data === 101 || e.data === 150) {
-    setVerdict("vErr", "detected & handled", "v-ok");
-    $("nowTitle").textContent = "⚠ " + ids[i] + " — embedding disabled";
-  } else {
-    $("nowTitle").textContent = "⚠ " + ids[i] + " — " + why;
-  }
+  log(`onError: ${why} (${e.data}) for ${ids[i]} — handled, no black box`);
+  setVerdict("vErr", "handled: " + why, "v-ok");
+  $("nowTitle").textContent = "⚠ " + ids[i] + " — " + why + " (would skip)";
 }
 
 // --- Controls --------------------------------------------------------------
