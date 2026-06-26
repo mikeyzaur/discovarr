@@ -1,0 +1,59 @@
+# config.toml — version-controlled discov config (NOT secrets; those live in
+# .env, git-ignored + host-only). To change: edit, commit, then on the host:
+#   git pull && docker compose -f app/docker-compose.yml up -d --build
+# Missing/malformed values fall back to built-in defaults in main.py.
+
+[themes]
+titles_per_theme = 30          # cap per carousel (caps API hydration cost)
+
+[cache]
+title_seconds   = 86400        # 24h — metadata changes slowly
+ratings_seconds = 21600        # 6h  — ratings move a bit faster
+theme_seconds   = 43200        # 12h — list/trending resolutions + watched set
+
+# --- ratings: which chips, in what order. Render-what-exists; blank when none. ---
+[ratings]
+chips = ["imdb", "rt_critic", "rt_audience"]   # add "metacritic"/"letterboxd" later
+
+# --- Nav-bar STANDARD themes (fixed, recognisable, jump-to). Edit freely. ---
+# source: trakt_trending | trakt_watchlist | mdblist | tmdb_discover
+[[standard_themes]]
+id = "trending"
+label = "Trakt Trending"
+source = "trakt_trending"
+mtype = "movie"
+
+[[standard_themes]]
+id = "watchlist"
+label = "Your Watchlist"
+source = "trakt_watchlist"
+
+[[standard_themes]]
+id = "book-to-movie"
+label = "From Book to Movie"
+source = "mdblist"
+list_id = "REPLACE_WITH_AN_MDBLIST_LIST_ID"   # e.g. a public "based on a book" list
+
+[[standard_themes]]
+id = "award-winners"
+label = "Award Winners"
+source = "mdblist"
+list_id = "REPLACE_WITH_AN_MDBLIST_LIST_ID"   # e.g. a public "Oscar winners" list
+
+# --- Generated ↑/↓ reel dimensions (TMDB Discover). genres = TMDB genre ids. ---
+[generated]
+decades = [1980, 1990, 2000, 2010, 2020]
+
+[generated.genres]
+"Sci-Fi"      = 878
+"Thrillers"   = 53
+"Comedies"    = 35
+"Horror"      = 27
+"Action"      = 28
+"Crime"       = 80
+"Drama"       = 18
+"Animation"   = 16
+"Documentary" = 99
+"Fantasy"     = 14
+"Romance"     = 10749
+"Mystery"     = 9648
