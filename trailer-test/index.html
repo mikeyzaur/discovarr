@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>discov · Step 0 — Trailer Playback Spike</title>
+<style>
+  :root { --bg:#0b0d10; --panel:#14181d; --ink:#e8eef3; --muted:#8a97a4; --ok:#3ddc84; --bad:#ff5d5d; --warn:#ffce5d; --accent:#5db0ff; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+  /* Theatre layout preview: ~2/3 video, ~1/3 status panel. Stacks on phones. */
+  #app { display:grid; grid-template-columns: 2fr 1fr; gap:14px; height:100%; padding:14px; }
+  @media (max-width: 820px) { #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+  #stage { position:relative; background:#000; border-radius:12px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center; min-height:240px; }
+  #player { position:absolute; inset:0; width:100%; height:100%; border:0; }
+
+  /* Start splash — THE user gesture that unlocks sound for the whole session. */
+  #splash { position:absolute; inset:0; z-index:5; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:18px; background:radial-gradient(circle at 50% 40%, #1a2230, #000); }
+  #startBtn { font-size:20px; font-weight:700; letter-spacing:.3px; color:#04121f;
+    background:var(--accent); border:0; border-radius:999px; padding:16px 40px; cursor:pointer;
+    box-shadow:0 8px 30px rgba(93,176,255,.35); }
+  #startBtn:active { transform: translateY(1px); }
+  #splash small { color:var(--muted); max-width:340px; text-align:center; }
+
+  .panel { background:var(--panel); border-radius:12px; padding:16px; overflow:auto; }
+  h1 { font-size:16px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 14px; font-size:13px; }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted);
+    margin:18px 0 8px; }
+
+  .row { display:flex; justify-content:space-between; gap:10px; padding:6px 0;
+    border-bottom:1px solid #20272f; font-variant-numeric:tabular-nums; }
+  .row b { font-weight:600; }
+  .v-ok { color:var(--ok); } .v-bad { color:var(--bad); } .v-warn { color:var(--warn); } .v-muted{ color:var(--muted); }
+
+  .controls { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  button.ctl { background:#202833; color:var(--ink); border:1px solid #2c3744; border-radius:8px;
+    padding:8px 12px; cursor:pointer; font-size:13px; }
+  button.ctl:hover { border-color:var(--accent); }
+  label.toggle { display:flex; align-items:center; gap:8px; margin-top:10px; color:var(--muted); }
+
+  .nowTitle { font-weight:700; }
+  .nowMeta { color:var(--muted); font-size:13px; }
+
+  textarea { width:100%; height:96px; background:#0c1116; color:var(--ink); border:1px solid #2c3744;
+    border-radius:8px; padding:8px; font:12px/1.4 ui-monospace, Menlo, monospace; resize:vertical; }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+
+  #log { font:11px/1.4 ui-monospace, Menlo, monospace; color:var(--muted); white-space:pre-wrap;
+    max-height:160px; overflow:auto; background:#0c1116; border-radius:8px; padding:8px; margin-top:4px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Video stage (the ~2/3) -->
+  <div id="stage">
+    <div id="player"></div>
+    <div id="splash">
+      <button id="startBtn">▶  Start the reel</button>
+      <small>Press Start to begin. This single tap is what unlocks <b>sound-on autoplay</b>
+      for the rest of the session on every browser — including iPhone.</small>
+    </div>
+  </div>
+
+  <!-- Status panel (the ~1/3) -->
+  <div class="panel">
+    <h1>Step 0 — Trailer Playback Spike</h1>
+    <p class="sub">Proving four things before we build anything. Open this on the LAN, on the
+      iPhone over Tailscale, and on the eventual TV browser — read the verdicts below.</p>
+
+    <div class="nowTitle" id="nowTitle">— not started —</div>
+    <div class="nowMeta" id="nowMeta">video <span id="idx">0</span> of <span id="count">0</span></div>
+
+    <h2>The four verdicts</h2>
+    <div class="row"><span>1 · Embeds &amp; plays in-page</span><b id="vPlay" class="v-muted">waiting</b></div>
+    <div class="row"><span>2 · Sound on (not force-muted)</span><b id="vSound" class="v-muted">waiting</b></div>
+    <div class="row"><span>3 · ENDED fires (auto-advance)</span><b id="vEnded" class="v-muted">waiting</b></div>
+    <div class="row"><span>4 · Embedding-disabled handled</span><b id="vErr" class="v-muted">waiting</b></div>
+
+    <h2>Controls (or use arrow keys)</h2>
+    <div class="controls">
+      <button class="ctl" id="prevBtn">◀ Prev</button>
+      <button class="ctl" id="nextBtn">Next ▶</button>
+      <button class="ctl" id="muteBtn">🔊 Toggle mute</button>
+      <button class="ctl" id="replayBtn">↻ Replay</button>
+    </div>
+    <label class="toggle"><input type="checkbox" id="autoAdv" /> Auto-advance when a trailer ends (couch mode)</label>
+    <p class="hint">Manual advance (Prev/Next/arrows) is itself a gesture → sound guaranteed.
+      Auto-advance is the iPhone unknown — toggle it on and watch whether the next trailer keeps sound.</p>
+
+    <h2>Trailer IDs (edit freely)</h2>
+    <textarea id="ids"></textarea>
+    <p class="hint">One YouTube video ID per line. Pre-filled with placeholder trailer IDs —
+      <b>swap any that fail</b>. To test verdict 4, paste an ID you know has embedding disabled.
+      Click “Apply &amp; restart” after editing.</p>
+    <div class="controls"><button class="ctl" id="applyBtn">Apply &amp; restart</button></div>
+
+    <h2>Event log</h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+/* ---- Step 0 spike logic --------------------------------------------------
+   Pure front-end, no backend, no APIs. Loads the YouTube IFrame API, attempts
+   UNMUTED autoplay after the Start gesture, and reports what the browser
+   actually allowed. Everything here is a throwaway probe — not app code. */
+
+// Placeholder trailer IDs. The Breaking Bad one is the example from the handover.
+// The rest are best-guess official-trailer IDs — swap any that don't resolve.
+const DEFAULT_IDS = [
+  "XZ8daibM3AE", // Breaking Bad (handover example)
+  "Way9Dexny3w", // Dune: Part Two (verify/swap)
+  "uYPbbksJxIg", // Oppenheimer (verify/swap)
+  "mqqft2x_Aa4"  // The Batman (verify/swap)
+];
+
+let player = null;
+let ids = DEFAULT_IDS.slice();
+let i = 0;
+let started = false;
+
+const $ = (id) => document.getElementById(id);
+const setVerdict = (el, text, cls) => { const n=$(el); n.textContent=text; n.className=cls; };
+function log(msg) {
+  const t = new Date().toLocaleTimeString();
+  $("log").textContent = `[${t}] ${msg}\n` + $("log").textContent;
+}
+
+$("ids").value = DEFAULT_IDS.join("\n");
+
+// --- Load the IFrame API ---------------------------------------------------
+const tag = document.createElement("script");
+tag.src = "https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+
+window.onYouTubeIframeAPIReady = function () {
+  log("YouTube IFrame API ready.");
+  player = new YT.Player("player", {
+    width: "100%", height: "100%",
+    playerVars: {
+      autoplay: 1,
+      mute: 0,            // ATTEMPT unmuted — we then check what the browser allowed
+      controls: 1,
+      rel: 0,
+      playsinline: 1,     // critical for iOS: don't force fullscreen
+      enablejsapi: 1,
+      modestbranding: 1
+    },
+    events: { onReady: onReady, onStateChange: onStateChange, onError: onError }
+  });
+};
+
+function onReady() { log("Player ready (waiting for Start gesture)."); }
+
+function load(n) {
+  if (!player || !ids.length) return;
+  i = (n + ids.length) % ids.length;
+  $("idx").textContent = i + 1;
+  $("count").textContent = ids.length;
+  $("nowTitle").textContent = "Loading " + ids[i] + " …";
+  log(`Load video ${i + 1}/${ids.length}: ${ids[i]}`);
+  // loadVideoById autoplays; we explicitly try to unmute right after.
+  player.loadVideoById(ids[i]);
+  player.unMute();
+  player.setVolume(100);
+}
+
+function onStateChange(e) {
+  const states = {[-1]:"unstarted",0:"ENDED",1:"playing",2:"paused",3:"buffering",5:"cued"};
+  log("state → " + (states[e.data] ?? e.data));
+
+  if (e.data === YT.PlayerState.PLAYING) {
+    setVerdict("vPlay", "YES — playing", "v-ok");
+    $("nowTitle").textContent = "Now playing: " + ids[i];
+    // Check what the browser ACTUALLY did with sound.
+    const muted = player.isMuted();
+    const vol = player.getVolume();
+    if (muted || vol === 0) {
+      setVerdict("vSound", "force-muted by browser", "v-warn");
+      log(`Sound: browser force-muted (isMuted=${muted}, vol=${vol}). Press “Toggle mute”.`);
+    } else {
+      setVerdict("vSound", `YES — vol ${vol}`, "v-ok");
+      log(`Sound: unmuted OK (vol=${vol}).`);
+    }
+  }
+
+  if (e.data === YT.PlayerState.ENDED) {
+    setVerdict("vEnded", "YES — fired", "v-ok");
+    if ($("autoAdv").checked) {
+      log("Auto-advance: rolling to next (watch if it KEEPS sound — the iPhone question).");
+      load(i + 1);
+    }
+  }
+}
+
+function onError(e) {
+  // 101 / 150 == embedding disabled by uploader. 100 == not found. 2 == bad id.
+  const codes = {2:"invalid id",5:"HTML5 error",100:"not found / removed",101:"EMBEDDING DISABLED",150:"EMBEDDING DISABLED"};
+  const why = codes[e.data] ?? ("code " + e.data);
+  log(`onError: ${why} (${e.data}) for ${ids[i]}`);
+  if (e.data === 101 || e.data === 150) {
+    setVerdict("vErr", "detected & handled", "v-ok");
+    $("nowTitle").textContent = "⚠ " + ids[i] + " — embedding disabled";
+  } else {
+    $("nowTitle").textContent = "⚠ " + ids[i] + " — " + why;
+  }
+}
+
+// --- Controls --------------------------------------------------------------
+function start() {
+  if (started) return;
+  started = true;
+  $("splash").style.display = "none";
+  log("Start pressed — gesture banked, attempting sound-on autoplay.");
+  load(0);
+}
+
+$("startBtn").onclick = start;
+$("nextBtn").onclick = () => load(i + 1);
+$("prevBtn").onclick = () => load(i - 1);
+$("replayBtn").onclick = () => load(i);
+$("muteBtn").onclick = () => {
+  if (!player) return;
+  if (player.isMuted()) { player.unMute(); player.setVolume(100); log("Unmuted."); setVerdict("vSound","YES — manual unmute","v-ok"); }
+  else { player.mute(); log("Muted."); }
+};
+$("applyBtn").onclick = () => {
+  const parsed = $("ids").value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!parsed.length) { log("No IDs — keeping current list."); return; }
+  ids = parsed; log(`Applied ${ids.length} IDs.`);
+  if (started) load(0);
+};
+
+document.addEventListener("keydown", (ev) => {
+  if (!started && (ev.key === "Enter" || ev.key === " ")) { start(); ev.preventDefault(); return; }
+  if (ev.key === "ArrowRight") { load(i + 1); ev.preventDefault(); }
+  if (ev.key === "ArrowLeft")  { load(i - 1); ev.preventDefault(); }
+  if (ev.key === "m" || ev.key === "M") { $("muteBtn").click(); }
+});
+</script>
+</body>
+</html>
