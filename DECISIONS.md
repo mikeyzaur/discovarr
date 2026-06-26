@@ -1,4 +1,4 @@
-# discov — Decisions log
+# discovarr — Decisions log
 
 Outcomes from the concept grilling. Records *what we settled and why*, so the handover's
 open assumptions don't get silently re-litigated.
@@ -78,19 +78,19 @@ The concept is de-risked. Spike lives in `trailer-test/` (throwaway probe, not a
 - Watched-history ∪ never-show-again = the exclusion filter applied before any theme serves.
 
 ## Infra  *(confirmed against arr-stack / homelab-dashboard repos)*
-- Container `discov-api`, host port **8001** (dashboard owns 8000).
+- Container `discovarr-api`, host port **8001** (dashboard owns 8000).
 - Network `arr-stack_media_net` (joined `external: true`, mirrors the dashboard).
 - Seerr reachable by-name `seerr:5055` (no published port; in-network only).
 - Caddy block in arr-stack's `caddy/Caddyfile`:
   ```
   discov.arr {
       tls internal
-      reverse_proxy discov-api:8001
+      reverse_proxy discovarr-api:8001
   }
   ```
 - Pi-hole local DNS `discov.arr → 10.13.37.168` (v6 `pihole.toml dns.hosts`, not `custom.list`).
 - Tailscale `.arr` cache gotcha: bounce `accept-dns` on clients after adding the record.
-- State: SQLite `/data/discov.db` on a persistent volume.
+- State: SQLite `/data/discovarr.db` on a persistent volume.
 
 ## Explicitly deferred
 - iPhone PWA polish / native iOS app — after browser proves out.

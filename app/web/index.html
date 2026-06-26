@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>discov</title>
+<title>discovarr</title>
 <style>
   html,body{margin:0;height:100%;background:#0b0d10;color:#e8eef3;
     font:15px/1.5 system-ui,sans-serif;display:grid;place-items:center;text-align:center}
@@ -16,14 +16,14 @@
 </head>
 <body>
   <div class="card">
-    <h1>discov · backend up</h1>
+    <h1>discovarr · backend up</h1>
     <p class="muted">Step 1 scaffold. The theatre frontend lands in Step 2 and replaces this file.</p>
     <p>Verify on the host:</p>
     <p><code>curl localhost:8001/api/health</code><br>
        <code>curl "localhost:8001/api/title/1396?type=tv"</code><br>
        <code>curl localhost:8001/api/themes</code></p>
     <p class="muted">connection-refused = the app failed to <i>start</i> (import/syntax) —
-       check <code>docker compose logs discov-api</code>. 500 = a handler raised.</p>
+       check <code>docker compose logs discovarr-api</code>. 500 = a handler raised.</p>
   </div>
 </body>
 </html>

@@ -26,5 +26,5 @@ curl localhost:8001/api/health
 ```
 
 Stack: FastAPI + httpx proxy (holds all keys), single-file vanilla-JS frontend, SQLite at
-`/data/discov.db`. Data sources: TMDB (catalog/trailers), MDBList (ratings/lists), Trakt
+`/data/discovarr.db`. Data sources: TMDB (catalog/trailers), MDBList (ratings/lists), Trakt
 (watchlist/watched/trending), Seerr (requests).

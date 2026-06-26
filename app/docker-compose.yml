@@ -1,23 +1,23 @@
 services:
-  discov-api:
+  discovarr-api:
     build: .
-    container_name: discov-api
+    container_name: discovarr-api
     env_file:
       - .env
     ports:
       - "127.0.0.1:8001:8001"   # dev/direct; Caddy (discov.arr) fronts this on the LAN
     volumes:
-      - discov_db:/data          # SQLite: cache + excludes + Trakt tokens
+      - discovarr_db:/data          # SQLite: cache + excludes + Trakt tokens
     networks:
       - arrnet
     restart: unless-stopped
 
 networks:
   arrnet:
-    # Same external network as Caddy + Seerr so `discov-api` is reachable by name
-    # from Caddy and discov can reach `seerr:5055`. Confirm against arr-stack compose.
+    # Same external network as Caddy + Seerr so `discovarr-api` is reachable by name
+    # from Caddy and discovarr can reach `seerr:5055`. Confirm against arr-stack compose.
     name: arr-stack_media_net
     external: true
 
 volumes:
-  discov_db:
+  discovarr_db:

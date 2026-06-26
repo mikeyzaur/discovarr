@@ -29,7 +29,7 @@ then `discov-handover.md` (original brief). KB: `homelab-kb/apps/discovarr.md`.
 
 ## Layout
 
-- `app/main.py` — `Settings` (every key first — see gotcha), SQLite `/data/discov.db`
+- `app/main.py` — `Settings` (every key first — see gotcha), SQLite `/data/discovarr.db`
   (cache + excludes + Trakt tokens), TMDB/MDBList/Trakt/Seerr clients, tile contract, theme
   engine, the `/api/*` routes, static mount. Single file by convention; grep, don't trust
   line numbers.
@@ -41,7 +41,7 @@ then `discov-handover.md` (original brief). KB: `homelab-kb/apps/discovarr.md`.
 
 ## How it deploys
 
-Own Compose project (`discov-api`) on the arr-stack host, joining the **arr-stack repo's**
+Own Compose project (`discovarr-api`) on the arr-stack host, joining the **arr-stack repo's**
 network externally as `arrnet` (real name `arr-stack_media_net`) so Caddy + `seerr:5055` are
 reachable by name. Port `127.0.0.1:8001:8001`. Caddy fronts it at `http://discov.arr/` —
 that route + the Pi-hole record live in the **arr-stack repo**, not here.
@@ -58,6 +58,6 @@ git pull && docker compose -f app/docker-compose.yml up -d --build   # on the ho
   `Settings` field FIRST, then the env var.
 - **`from __future__ import annotations` must be the first statement** after the docstring.
 - Verify on the host: `curl localhost:8001/api/title/<id>` — 500 = handler raised (`docker
-  compose logs discov-api`); **connection-refused = the app failed to *start*** (import/syntax).
+  compose logs discovarr-api`); **connection-refused = the app failed to *start*** (import/syntax).
 - Log on every upstream failure — silent failures were the dashboard's worst time-sink.
 - Don't touch the live host — Claude edits this repo only; deployment is manual.

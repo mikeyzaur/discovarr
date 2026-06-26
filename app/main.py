@@ -1,5 +1,5 @@
 """
-discov — backend proxy (Step 1).
+discovarr — backend proxy (Step 1).
 
 The only holder of API keys. Fans out to TMDB / MDBList / Trakt / Seerr and
 normalises every title into ONE shape (the tile contract in §4 of the handover)
@@ -39,10 +39,10 @@ from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 MediaType = Literal["movie", "tv"]
-DB_PATH = Path("/data/discov.db")
+DB_PATH = Path("/data/discovarr.db")
 APP_DIR = Path(__file__).parent
 
-# Piggyback uvicorn's logger so output lands in `docker compose logs discov-api`.
+# Piggyback uvicorn's logger so output lands in `docker compose logs discovarr-api`.
 log = logging.getLogger("uvicorn.error")
 
 
@@ -155,14 +155,14 @@ async def lifespan(app: FastAPI):
     global client
     init_db()
     client = httpx.AsyncClient(timeout=12.0)
-    log.info("discov backend up. TMDB=%s MDBList=%s Trakt=%s Seerr=%s",
+    log.info("discovarr backend up. TMDB=%s MDBList=%s Trakt=%s Seerr=%s",
              bool(settings.tmdb_token), bool(settings.mdblist_api_key),
              bool(settings.trakt_client_id), bool(settings.seerr_api_key))
     yield
     await client.aclose()
 
 
-app = FastAPI(title="discov", lifespan=lifespan)
+app = FastAPI(title="discovarr", lifespan=lifespan)
 
 
 # ---------------------------------------------------------------------------

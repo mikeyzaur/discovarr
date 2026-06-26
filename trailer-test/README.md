@@ -1,7 +1,7 @@
 # Step 0 — Trailer Playback Spike
 
 Throwaway probe. **No backend, no APIs.** It exists to answer one blocking question before
-we build `discov`: *do YouTube trailers embed and play the way the whole concept assumes?*
+we build `discovarr`: *do YouTube trailers embed and play the way the whole concept assumes?*
 
 ## What it tests (the four verdicts on screen)
 

@@ -39,7 +39,7 @@ repo + Pi-hole record + Tailscale DNS bounce) — not started.
 4. **Trakt OAuth (one-time):** `curl -X POST localhost:8001/api/trakt/device` → open the
    `verification_url`, enter `user_code`, then poll
    `curl -X POST "localhost:8001/api/trakt/device/poll?device_code=<device_code>"` until
-   `{authorised:true}`. Tokens land in `/data/discov.db` and auto-refresh on 401.
+   `{authorised:true}`. Tokens land in `/data/discovarr.db` and auto-refresh on 401.
 
 ## Deploy & verify (inherited dashboard gotchas — these bite)
 
@@ -50,18 +50,18 @@ repo + Pi-hole record + Tailscale DNS bounce) — not started.
   field in `main.py` FIRST, then the env var.
 - `from __future__ import annotations` must be the first statement after the docstring.
 - `curl localhost:8001/...` on the host: 500 = handler raised (`docker compose logs
-  discov-api`); **connection-refused = app failed to *start*** (import/syntax).
+  discovarr-api`); **connection-refused = app failed to *start*** (import/syntax).
 
 ## Relevant files
 
-- `app/main.py` — backend: `Settings`, SQLite (`/data/discov.db`: cache + excludes + Trakt
+- `app/main.py` — backend: `Settings`, SQLite (`/data/discovarr.db`: cache + excludes + Trakt
   tokens), TMDB/MDBList/Trakt/Seerr clients, tile contract, theme engine (generated reel +
   standard nav), routes `/api/{health,title/{id},themes,exclude,watchlist,request,
   trakt/device,trakt/device/poll}`, static mount. Use grep, not line numbers.
 - `app/config.toml` — nav (standard) themes, generated genres/decades, rating chips, TTLs,
   per-theme cap. (Two MDBList list-id placeholders to fill.)
 - `app/{Dockerfile,docker-compose.yml,requirements.txt,.env.example}` — port 8001, container
-  `discov-api`, network `arr-stack_media_net` (external), `/data` volume.
+  `discovarr-api`, network `arr-stack_media_net` (external), `/data` volume.
 - `app/web/index.html` — placeholder; **Step 2 replaces it** with the theatre UI (per the
   player requirements in `DECISIONS.md`: hide title/share via poster-fade, pause on Space +
   remote OK, clean chrome).

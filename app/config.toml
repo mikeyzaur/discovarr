@@ -1,4 +1,4 @@
-# config.toml — version-controlled discov config (NOT secrets; those live in
+# config.toml — version-controlled discovarr config (NOT secrets; those live in
 # .env, git-ignored + host-only). To change: edit, commit, then on the host:
 #   git pull && docker compose -f app/docker-compose.yml up -d --build
 # Missing/malformed values fall back to built-in defaults in main.py.
