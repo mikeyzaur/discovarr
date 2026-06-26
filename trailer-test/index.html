@@ -17,6 +17,8 @@
   #stage { position:relative; background:#000; border-radius:12px; overflow:hidden;
     display:flex; align-items:center; justify-content:center; min-height:240px; }
   #player { position:absolute; inset:0; width:100%; height:100%; border:0; }
+  /* Transparent overlay: swallows hover/taps so YouTube's chrome never reveals. */
+  #cover { position:absolute; inset:0; z-index:2; }
 
   /* Start splash — THE user gesture that unlocks sound for the whole session. */
   #splash { position:absolute; inset:0; z-index:5; display:flex; flex-direction:column;
@@ -60,6 +62,7 @@
   <!-- Video stage (the ~2/3) -->
   <div id="stage">
     <div id="player"></div>
+    <div id="cover"></div>
     <div id="splash">
       <button id="startBtn">▶  Start the reel</button>
       <small>Press Start to begin. This single tap is what unlocks <b>sound-on autoplay</b>
@@ -147,11 +150,14 @@ window.onYouTubeIframeAPIReady = function () {
     playerVars: {
       autoplay: 1,
       mute: 0,            // ATTEMPT unmuted — we then check what the browser allowed
-      controls: 1,
+      controls: 0,        // hide YouTube's control bar (we drive playback ourselves)
       rel: 0,
       playsinline: 1,     // critical for iOS: don't force fullscreen
       enablejsapi: 1,
-      modestbranding: 1
+      modestbranding: 1,  // (largely ignored by YT now, harmless)
+      iv_load_policy: 3,  // hide annotations
+      disablekb: 1,       // let OUR key handlers win, not the player's
+      fs: 0               // no fullscreen button
     },
     events: { onReady: onReady, onStateChange: onStateChange, onError: onError }
   });

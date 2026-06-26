@@ -1,23 +1,36 @@
 # discov — Decisions log
 
 Outcomes from the concept grilling. Records *what we settled and why*, so the handover's
-open assumptions don't get silently re-litigated. Nothing here is built yet beyond Step 0.
+open assumptions don't get silently re-litigated.
 
 ## Build spine
-**Step 0** trailer spike → **Step 1** full backend + all four APIs (TMDB, MDBList, Trakt,
+**Step 0** trailer spike ✅ → **Step 1** full backend + all four APIs (TMDB, MDBList, Trakt,
 Seerr) wired together → **Step 2** theatre frontend → **Step 3** deploy (Caddy + Pi-hole +
 Tailscale). Decided *not* to stage the APIs — bring the whole data layer in at Step 1 rather
 than half-building it.
+
+## Step 0 — DONE (verified on desktop Firefox + iPhone Safari over LAN)
+All four verdicts passed:
+1. ✅ Trailers embed and play in-page.
+2. ✅ **Sound-on autoplay after the single Start-button gesture — on iPhone too** (the
+   strictest case; this was the scariest unknown and it passed).
+3. ✅ ENDED fires; **auto-advance keeps sound on iPhone** (the second scary unknown — passed,
+   so couch-mode works fully on iOS).
+4. ✅ Unplayable trailers (removed/region-locked/etc.) detected via `onError` → would skip,
+   no dead black box. Owner-disabled embedding turned out rare (probed ~25 popular videos,
+   zero blocked); age-restricted is the one case `onError` can't catch (shows an age-gate),
+   but TMDB trailers are effectively never age-gated → non-issue, with a load-timeout skip as
+   the safety net if it ever happens.
+
+The concept is de-risked. Spike lives in `trailer-test/` (throwaway probe, not app code).
 
 ## Sound / autoplay  *(the load-bearing UX decision)*
 - **Start splash button** is the entry point. That single tap banks the browser user-gesture →
   **sound-on autoplay for the whole session, every device including iPhone.** No per-device
   permission faff, and it works for guests later.
 - Manual advance (arrows/Next) is itself a gesture → **sound guaranteed everywhere**.
-- **Auto-advance is the one residual unknown on iOS** — a programmatic next-video (no fresh
-  tap) keeps sound on desktop/TV, but iOS Safari may force-mute it. **Step 0 spike measures
-  this.** Fallback if iOS mutes: auto-advance still rolls (muted on that device) or disable
-  auto-advance on iOS only.
+- ~~Auto-advance is the one residual unknown on iOS~~ → **RESOLVED in Step 0: iPhone keeps
+  sound through auto-advance.** No fallback needed.
 - `playsinline` always, so iOS doesn't force fullscreen.
 - Pi-hole currently has **no blocklists** → embed DNS-blocking is a non-risk today.
 
@@ -30,6 +43,19 @@ than half-building it.
 - Selecting a nav theme drops you into that carousel; ↑/↓ continues through the generated
   stack from there. (Exact post-selection ↑ behaviour = small build-time detail.)
 - **Movies + TV interleaved in a single carousel**, `type` carried per tile.
+
+## Player chrome & controls  *(Step 2 requirements, from Step 0 testing)*
+- **Clean chrome:** `controls:0` + `iv_load_policy:3` + `disablekb:1` + `fs:0`, plus a
+  transparent **cover overlay** over the iframe so hover/tap never reveals YouTube's UI.
+- **Title + Share top-bar must go** (`controls:0` does NOT remove them). Approach: the
+  poster-instant + lazy-mount **fade-in** (handover §6) hides the load-time title/share flash
+  *behind the poster*; YouTube auto-hides the top bar a few seconds into playback, and the
+  cover overlay stops it re-revealing. **Fallback if any residual:** oversized-iframe clipped
+  by `overflow:hidden` to push the top/bottom chrome outside the visible frame (minor crop).
+- **Spinner at load is acceptable** (hidden behind the poster anyway).
+- **Pause control required:** play/pause toggle on **Spacebar** and the **remote centre/OK
+  button**. NOTE this collides with the handover's "Space = toggle auto-advance" — reassign
+  auto-advance to another key; settle the full key-map at Step 2.
 
 ## Hydration / caching
 - On load, hydrate only the **first title of each of the ~10 themes** (vertical preview);
