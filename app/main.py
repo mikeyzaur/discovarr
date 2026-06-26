@@ -243,15 +243,13 @@ _RATING_MAP = {
 async def mdblist_ratings(imdb_id: Optional[str], tmdb_id: int, mtype: MediaType) -> dict:
     if not settings.mdblist_api_key:
         return {}
-    params = {"apikey": settings.mdblist_api_key}
-    if imdb_id:
-        params["i"] = imdb_id
-    else:
-        params["tm"] = tmdb_id
-        params["m"] = "movie" if mtype == "movie" else "show"
-    r = await client.get(f"{MDBLIST}/", params=params)
+    # RESTful: /{provider}/{type}/{id}. The TYPE MUST MATCH the media — an
+    # imdb/movie lookup of a show's id 404s. Prefer imdb id, fall back to tmdb.
+    mt = "movie" if mtype == "movie" else "show"
+    provider, ident = ("imdb", imdb_id) if imdb_id else ("tmdb", tmdb_id)
+    r = await client.get(f"{MDBLIST}/{provider}/{mt}/{ident}", params={"apikey": settings.mdblist_api_key})
     if r.status_code != 200:
-        log.warning("MDBList %s -> %s %s", imdb_id or tmdb_id, r.status_code, r.text[:120])
+        log.warning("MDBList %s/%s/%s -> %s %s", provider, mt, ident, r.status_code, r.text[:120])
         return {}
     out: dict = {}
     for rt in r.json().get("ratings", []) or []:
@@ -466,7 +464,7 @@ async def health():
     checks = {
         "tmdb": (f"{TMDB}/configuration", _tmdb_headers()),
         "trakt": (f"{TRAKT}/movies/trending?limit=1", _trakt_public_headers()),
-        "mdblist": (f"{MDBLIST}/?apikey={settings.mdblist_api_key}&i=tt0903747", {}),
+        "mdblist": (f"{MDBLIST}/imdb/show/tt0903747?apikey={settings.mdblist_api_key}", {}),
         "seerr": (f"{settings.seerr_base}/api/v1/status", {"X-Api-Key": settings.seerr_api_key}),
     }
     for name, (url, headers) in checks.items():
