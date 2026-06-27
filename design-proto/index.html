@@ -230,31 +230,31 @@ button{font-family:inherit;color:inherit;}
    =========================================================================== */
 const THEMES = [
   { id:"trending", label:"Trakt Trending", kind:"Standard", titles:[
-    {t:"Dune: Part Two", y:2024, yt:"Way9Dexny3w", r:{imdb:"8.5",rt_critic:"92",rt_audience:"95"},
+    {t:"Dune: Part Two", y:2024, yt:"Way9Dexny3w", p:"heM4XKC0jA8fTSNe8F7oUkcJV7Z", r:{imdb:"8.5",rt_critic:"92",rt_audience:"95"},
       o:"Paul Atreides unites with the Fremen to wage war against the conspirators who destroyed his family."},
-    {t:"Oppenheimer", y:2023, yt:"uYPbbksJxIg", r:{imdb:"8.3",rt_critic:"93",rt_audience:"91"},
+    {t:"Oppenheimer", y:2023, yt:"uYPbbksJxIg", p:"8Gxv8gSFCU0XGDykEGv7zR1n2ua", r:{imdb:"8.3",rt_critic:"93",rt_audience:"91"},
       o:"The story of J. Robert Oppenheimer and his role in the development of the atomic bomb."},
-    {t:"The Batman", y:2022, yt:"mqqft2x_Aa4", r:{imdb:"7.8",rt_critic:"85",rt_audience:"87"},
+    {t:"The Batman", y:2022, yt:"mqqft2x_Aa4", p:"74xTEgt7R36Fpooo50r9T25onhq", r:{imdb:"7.8",rt_critic:"85",rt_audience:"87"},
       o:"A vengeful Batman tracks a sadistic killer through the corrupt streets of Gotham City."},
-    {t:"Mad Max: Fury Road", y:2015, yt:"hEJnMQG9ev8", r:{imdb:"8.1",rt_critic:"97",rt_audience:"86"},
+    {t:"Mad Max: Fury Road", y:2015, yt:"hEJnMQG9ev8", p:"hA2ple9q4qnwxp3hKVNhroipsir", r:{imdb:"8.1",rt_critic:"97",rt_audience:"86"},
       o:"On a desert road two rebels run from a tyrant and his war boys in a relentless chase."},
   ]},
   { id:"gen-mind", label:"Mind-Benders", kind:"80s–10s · Generated", titles:[
-    {t:"Inception", y:2010, yt:"YoHD9XEInc0", r:{imdb:"8.8",rt_critic:"87",rt_audience:"91"},
+    {t:"Inception", y:2010, yt:"YoHD9XEInc0", p:"xlaY2zyzMfkhk0HSC5VUwzoZPU1", r:{imdb:"8.8",rt_critic:"87",rt_audience:"91"},
       o:"A thief who steals corporate secrets through dream-sharing is offered a chance to erase his past."},
-    {t:"Interstellar", y:2014, yt:"zSWdZVtXT7E", r:{imdb:"8.7",rt_critic:"73",rt_audience:"86"},
+    {t:"Interstellar", y:2014, yt:"zSWdZVtXT7E", p:"yQvGrMoipbRoddT0ZR8tPoR7NfX", r:{imdb:"8.7",rt_critic:"73",rt_audience:"86"},
       o:"Explorers travel through a wormhole in an attempt to ensure humanity's survival."},
-    {t:"The Matrix", y:1999, yt:"vKQi3bBA1y8", r:{imdb:"8.7",rt_critic:"83",rt_audience:"85"},
+    {t:"The Matrix", y:1999, yt:"vKQi3bBA1y8", p:"dXNAPwY7VrqMAo51EKhhCJfaGb5", r:{imdb:"8.7",rt_critic:"83",rt_audience:"85"},
       o:"A hacker learns the shocking truth about his reality and his role in the war against its controllers."},
-    {t:"The Dark Knight", y:2008, yt:"EXeTwQWrcwY", r:{imdb:"9.0",rt_critic:"94",rt_audience:"94"},
+    {t:"The Dark Knight", y:2008, yt:"EXeTwQWrcwY", p:"qJ2tW6WMUDux911r6m7haRef0WH", r:{imdb:"9.0",rt_critic:"94",rt_audience:"94"},
       o:"Batman faces the Joker, a criminal mastermind bent on plunging Gotham into anarchy."},
   ]},
   { id:"bcw-bb", label:"Because you watched Breaking Bad", kind:"Personalised", titles:[
-    {t:"Better Call Saul", y:2015, yt:"HtRGzMnLU5c", r:{imdb:"9.0",rt_critic:"98",rt_audience:"93"},
+    {t:"Better Call Saul", y:2015, yt:"HtRGzMnLU5c", p:"zjg4jpK1Wp2kiRvtt5ND0kznako", r:{imdb:"9.0",rt_critic:"98",rt_audience:"93"},
       o:"The trials of small-time lawyer Jimmy McGill on his way to becoming Saul Goodman."},
-    {t:"Ozark", y:2017, yt:"5hAXVqrljbs", r:{imdb:"8.5",rt_critic:"81",rt_audience:"90"},
+    {t:"Ozark", y:2017, yt:"5hAXVqrljbs", p:"pCGyPVrI9Fzw6rE1Pvi4BIXF6ET", r:{imdb:"8.5",rt_critic:"81",rt_audience:"90"},
       o:"A financial adviser drags his family into money laundering for a drug cartel."},
-    {t:"Stranger Things", y:2016, yt:"b9EkMc79ZSU", r:{imdb:"8.7",rt_critic:"92",rt_audience:"90"},
+    {t:"Stranger Things", y:2016, yt:"b9EkMc79ZSU", p:"uOOtwVbSr4QDjAGIifLDwpb2Pdl", r:{imdb:"8.7",rt_critic:"92",rt_audience:"90"},
       o:"A small town uncovers a mystery of secret experiments and one very strange little girl."},
   ]},
 ];
@@ -262,6 +262,8 @@ const THEMES = [
 const CHIPS = ["imdb","rt_critic","rt_audience"];      // from config.toml [ratings].chips
 const CHIP_SRC = {imdb:"IMDb", rt_critic:"RT", rt_audience:"POPCORN", metacritic:"MC"};
 const thumb = (yt,q="maxresdefault") => `https://img.youtube.com/vi/${yt}/${q}.jpg`;
+// real TMDB poster art (clean + sharp). Production also has backdrop_url (16:9).
+const poster = p => `https://image.tmdb.org/t/p/w780/${p}.jpg`;
 
 // brand-ish rating glyphs (filled SVG): RT tomato (critic) + popcorn (audience). IMDb = badge.
 const TOMATO='<circle cx="12" cy="14" r="7.5" fill="#FA320A"/><path d="M12.5 7.1c-1.1-2.6.7-4 2.9-4.2-.6 1.9.1 3.6-2.9 4.2z" fill="#57A639"/><path d="M11.7 7c-.2-1.6-1-2.4-2.2-2.8.4 1.3.5 2.2 2.2 2.8z" fill="#57A639"/>';
@@ -348,11 +350,11 @@ function paintTitle(){
   }).join("");
   // position marker — dots only (no "Title x/x" text)
   $("#pmDots").innerHTML=th.titles.map((_,i)=>`<i class="${i===xi?'cur':''}"></i>`).join("");
-  // DEMO IMAGE LIMITATION: YouTube only gives sharp-but-texty (maxres custom thumb) OR
-  // clean-but-soft (frame grabs) — can't have both. Using the sharp one; the blurred
-  // spill hides its text. Production uses clean + sharp TMDB poster_url/backdrop_url.
-  $("#poster").style.backgroundImage=`url(${thumb(c.yt,"maxresdefault")})`;
-  $("#spill").style.backgroundImage=`url(${thumb(c.yt,"hqdefault")})`;
+  // Real TMDB poster art — clean + sharp for the in-screen still and the blurred
+  // spill. (Production additionally has a 16:9 backdrop_url for the screen.)
+  const pUrl = poster(c.p);
+  $("#poster").style.backgroundImage=`url(${pUrl})`;
+  $("#spill").style.backgroundImage=`url(${pUrl})`;
 }
 
 /* ---- load / play with debounce + skip safety --------------------------- */
