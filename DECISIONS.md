@@ -39,6 +39,15 @@ All four upstreams working end to end (`discovarr-api`, port 8001):
 - **Compose project name pinned to `discovarr`** (+ volume `discovarr_db`) — the `app/` dir
   otherwise derives project `app` and collides with homelab-dashboard (shared project →
   `down --remove-orphans` cross-nuke risk).
+- **Project/volume rename migration (one-time, done 2026-06-27):** the Step-1 live container
+  actually ran under the *unpinned* `app` project on volume **`app_discovarr_db`** until the
+  pins were first deployed at Step-2 build time. The pinned `up` created a fresh empty
+  `discovarr_db` and the explicit `container_name: discovarr-api` collided with the old
+  container. Resolved by `docker rm -f discovarr-api` (targeted by name — safe, NOT
+  `--remove-orphans`) → `docker run --rm -v app_discovarr_db:/from -v discovarr_db:/to alpine
+  cp -a /from/. /to/` (carried the Trakt tokens across) → `up -d`. **The stale
+  `app_discovarr_db` volume can be removed once you're confident** (`docker volume rm
+  app_discovarr_db`); kept for now as a rollback.
 
 ## Sound / autoplay  *(the load-bearing UX decision)*
 - **Start splash button** is the entry point. That single tap banks the browser user-gesture →
@@ -255,10 +264,11 @@ badge, RT tomato (critic), popcorn (audience). **Light** good/ok/bad quality tin
   episode_count) for the picker. Trakt "next-unwatched-season" smart-default = deferred.
 
 ### Build-time backend additions surfaced by the grill (Step 2 is NOT frontend-only)
-A small **"discovery slice"** rides alongside the frontend:
-1. **`/api/config`** — ratings chips + `trakt_authed` flag (+ any display config the FE needs).
-2. **Tile contract:** add `runtime` (movie) + `number_of_seasons`/`number_of_episodes` (tv) —
-   `append_to_response` already returns them.
+A small **"discovery slice"** rides alongside the frontend.
+**Cluster 1–3 DONE & verified live 2026-06-27** (commit `6fb185e`): items 1, 2, 8, 10, 11.
+1. ✅ **`/api/config`** — ratings chips + `trakt_authed` flag (+ any display config the FE needs).
+2. ✅ **Tile contract:** add `runtime` (movie) + `number_of_seasons`/`number_of_episodes` (tv) —
+   `append_to_response` already returns them. *(+ specials-stripped `seasons` list, see item 11.)*
 3. **Discovery actions:** recommendations endpoint (more-like-this); credits-based spawns
    (director via `with_crew`, cast via `with_cast`) + return the cast list (`profile_path`) for
    the picker.
@@ -270,14 +280,16 @@ A small **"discovery slice"** rides alongside the frontend:
    per cache cycle).
 7. **Endless feed:** a re-call of `/api/themes` appends a fresh generated batch (consider
    excluding already-seen / ditched themes).
-8. **`trailer_ok` via YouTube oEmbed** probe in `build_tile` (cached) → drop-on-load of dead/
-   non-embeddable trailers.
+8. ✅ **`trailer_ok` via YouTube oEmbed** probe in `build_tile` (cached on the tile, fires only
+   on a cold tile, **fails open**) → frontend drop-on-load of dead/non-embeddable trailers.
 9. **Randomised theme resolution:** quality-bounded random page for discover; shuffle for
    MDBList lists / trending / oversized watchlist (sample to the cap, re-rolled per pull).
-10. **Credits on the tile** (`append_to_response=credits`): director + top-10 cast w/
-    `profile_path` — powers the tooltip, cast picker and director/cast spawns with no extra call.
-11. **Seasons list on the tile** (season number + `episode_count`) for the TV request picker;
-    request sends `seasons:[…]`.
+10. ✅ **Credits on the tile** (`append_to_response=credits`): director + top-10 cast w/
+    `profile_path` (as `profile_url`, w185) + person `id` — powers the tooltip, cast picker and
+    director/cast spawns with no extra call. *Director = crew `Director` (movie) / `created_by`
+    creators (tv).*
+11. ✅ **Seasons list on the tile** (season number + `episode_count`, specials/season-0 dropped)
+    for the TV request picker; request sends `seasons:[…]`.
 
 ### Open / deferred (NOT part of this lock)
 - **Top-5 standard themes** — to be grilled separately. Award Winners still needs a real

@@ -27,12 +27,21 @@ autoplay after one Start gesture and auto-advance-keeps-sound, both on iOS. Conc
 - Seerr request path wired (not yet exercised with a real request).
 
 **Step 2** (theatre frontend) — **DESIGN LOCKED 2026-06-27** (full spec in `DECISIONS.md`;
-runnable visual mock in `design-proto/`, throwaway — delete once Step 2 ships). Build not
-started — that's the next work, and it now includes a small backend **"discovery slice"**
-(per `DECISIONS.md`: `/api/config`; `runtime`/season counts on the tile;
-recommendations/credits-based *more like this / director / cast*; mark-watched → Trakt;
-theme-exclusion; *Because you watched*; endless feed). **Step 3** (deploy: Caddy `discov.arr`
-route in arr-stack repo + Pi-hole record + Tailscale DNS bounce) — NOT started.
+runnable visual mock in `design-proto/`, throwaway — delete once Step 2 ships). It carries a
+backend **"discovery slice"** built first so the FE binds to real endpoints.
+- **Discovery slice cluster 1–3 DONE & verified live 2026-06-27** (commit `6fb185e`):
+  `/api/config` (chips + `trakt_authed`); tile now carries `runtime`/season+episode counts +
+  specials-stripped `seasons` list + `credits` (directors + top-10 cast w/ id + w185
+  `profile_url`) via one `append_to_response`; `trailer_ok` YouTube-oEmbed probe (cached on
+  the tile, fails open). Verified: `/api/config` → chips + `trakt_authed:true`; Inception →
+  runtime 148 + Nolan + 10 cast; Breaking Bad → 5 seasons/62 eps, specials excluded.
+- **Remaining slice (cluster 4 = NEXT):** recommendations + credits-based *more like this /
+  director / cast* spawns (item 3); mark-watched → Trakt `/sync/history` (4); theme-exclusion
+  `excluded_themes` + `/api/exclude-theme` (5); *Because you watched* seeded rows (6); endless
+  feed re-roll (7); randomised theme resolution (9). Then the theatre `index.html`.
+
+**Step 3** (deploy: Caddy `discov.arr` route in arr-stack repo + Pi-hole record + Tailscale DNS
+bounce) — NOT started.
 
 ## Gotchas learned this session (will bite again)
 
@@ -46,6 +55,10 @@ route in arr-stack repo + Pi-hole record + Tailscale DNS bounce) — NOT started
 - **Compose project name** is pinned to `discovarr` (was deriving `app` from the dir and
   colliding with homelab-dashboard). Volume pinned to `discovarr_db`. Don't let it revert to
   the dir-derived name or `down --remove-orphans` could cross-nuke the dashboard.
+  **The live container actually ran under the unpinned `app` project (volume
+  `app_discovarr_db`) until 2026-06-27** — migrated to pinned `discovarr`/`discovarr_db` at
+  Step-2 build time (Trakt tokens copied across; stale `app_discovarr_db` kept as rollback,
+  safe to `docker volume rm` once confident). Full note in `DECISIONS.md` Step-1 gotchas.
 
 ## Open items (small)
 
