@@ -53,7 +53,7 @@ button{font-family:inherit;color:inherit;}
 /* Transparent cover swallows hover/taps so YouTube chrome never reveals. */
 #cover{position:absolute;inset:0;z-index:3;cursor:pointer;}
 .poster{position:absolute;inset:0;z-index:2;background:#000 center/cover no-repeat;
-  opacity:0;transition:opacity .45s ease;}
+  opacity:0;transition:opacity .45s ease, transform .45s ease;}
 .poster.show{opacity:1;}
 .poster.gone{opacity:0;}        /* trailer ready — dissolve the still away over the video */
 #spinner{position:absolute;left:50%;top:50%;width:34px;height:34px;z-index:2;
@@ -284,11 +284,22 @@ const key = r => `${r.type}:${r.tmdb_id}`;
 
 // Double-buffered still + spill layers so titles CROSS-DISSOLVE instead of hard-cutting.
 const POS=[$("#posterA"),$("#posterB")], SP=[$("#spillA"),$("#spillB")];
-let frontLayer=0;
+let frontLayer=0, navAxis="", navDir=1;
+function enterOffset(){
+  const d=5;   // % — subtle directional slide; the fade masks the moving edge
+  if(navAxis==="x") return `translateX(${navDir>0?d:-d}%)`;   // ←/→ titles
+  if(navAxis==="y") return `translateY(${navDir>0?d:-d}%)`;   // ↑/↓ themes
+  return "";   // start / spawn → pure dissolve, no slide
+}
 function showImages(img){
   const nx=frontLayer^1, url = img ? `url("${img}")` : "";
-  POS[nx].style.backgroundImage=url; SP[nx].style.backgroundImage=url;
-  POS[nx].classList.remove("gone"); POS[nx].classList.add("show"); SP[nx].classList.add("show");
+  const inc=POS[nx];
+  inc.style.backgroundImage=url; SP[nx].style.backgroundImage=url;
+  // incoming still slides in from the travel direction while fading in; spill just dissolves
+  inc.style.transition="none"; inc.style.transform=enterOffset();
+  void inc.offsetWidth;                          // commit the start position
+  inc.style.transition=""; inc.style.transform="";
+  inc.classList.remove("gone"); inc.classList.add("show"); SP[nx].classList.add("show");
   POS[frontLayer].classList.remove("show"); SP[frontLayer].classList.remove("show");
   frontLayer=nx;
 }
@@ -349,7 +360,7 @@ let config = {ratings_chips:["imdb","rt_critic","rt_audience"], trakt_authed:fal
 let themes = [];                 // [{id,label,kind,titles:[{tmdb_id,type}],spawned}]
 let ti=0, xi=0, dir=1;
 let started=false, player=null, playerReady=false, pendingPlay=null;
-let settleTimer=null, loadTimeout=null, revealTimer=null, skips=0, landSeq=0;
+let settleTimer=null, loadTimeout=null, revealTimer=null, skips=0, landSeq=0, landTime=0;
 let boardSel=0, loadingMore=false, curTile=null;
 const tileCache = new Map();     // key -> tile | null
 const shownSet = new Set();      // keys shown this session (spawn de-dupe)
@@ -475,6 +486,7 @@ function paintTitle(t){
    =========================================================================== */
 async function land(){
   const seq=++landSeq;
+  landTime=performance.now();
   clearTimeout(settleTimer); clearTimeout(loadTimeout); clearTimeout(revealTimer);
   room.classList.add("lit");
   $("#screen").classList.add("buffering");
@@ -501,10 +513,12 @@ function onState(e){
     skips=0; clearTimeout(loadTimeout);
     try{ player.setPlaybackQuality("hd1080"); }catch(_){}   // best-effort; YouTube ultimately picks adaptively
     $("#screen").classList.remove("buffering");
-    // hold the still ~300ms past PLAYING (YT frame-render lag) then dissolve it away
-    // over the video — no black "loading" flash between still and trailer.
+    // Keep the still up at least ~2s total (consistent pacing no matter how fast the
+    // trailer buffered), and never less than 300ms past PLAYING (YT frame-render lag),
+    // then dissolve it away over the video.
     clearTimeout(revealTimer);
-    revealTimer=setTimeout(()=>{ POS[frontLayer].classList.add("gone"); }, 300);
+    const delay=Math.max(300, 2000-(performance.now()-landTime));
+    revealTimer=setTimeout(()=>{ POS[frontLayer].classList.add("gone"); }, delay);
   }
   if(e.data===YT.PlayerState.ENDED && autoAdvance){ dir=1; goTitle(1); }   // channel loop within theme
 }
@@ -527,10 +541,10 @@ function emptyTheme(){
    NAVIGATION — titles wrap within a theme; the theme axis is an endless feed
    (↓ past the end appends fresh generated themes; ↑ above the first stops).
    =========================================================================== */
-function goTitle(d){ dir=d; const th=themes[ti]; if(!th || !th.titles.length) return;
+function goTitle(d){ dir=d; navAxis="x"; navDir=d; const th=themes[ti]; if(!th || !th.titles.length) return;
   xi=(xi+d+th.titles.length)%th.titles.length; land(); }
 async function goTheme(d){
-  dir=1;
+  dir=1; navAxis="y"; navDir=d;
   if(d>0){
     if(ti>=themes.length-1) await loadMore();
     if(ti<themes.length-1){ ti++; xi=0; land(); }
@@ -633,7 +647,7 @@ async function spawn(label, kind, titlesPromise){
   const refs=(titles||[]).filter(r=>!shownSet.has(key(r)));
   if(!refs.length){ toast("Nothing new to show there"); return; }
   themes.splice(ti+1,0,{id:`spawn:${Date.now()}`, label, kind, titles:refs, spawned:true});
-  dir=1; ti=ti+1; xi=0; land();
+  dir=1; navAxis="y"; navDir=1; ti=ti+1; xi=0; land();   // slides up like a next-theme
 }
 
 function togglePause(){
@@ -733,7 +747,7 @@ function openBoard(){ boardSel=ti; buildBoard();
 function closeBoard(){ $("#board").classList.add("hide"); resetIdle();
   if(started && playerReady){ player.playVideo(); setIcon("pause","pause"); } }
 function startFrom(i){
-  ti=i; xi=0; dir=1;
+  ti=i; xi=0; dir=1; navAxis="";          // opening = pure dissolve, no slide
   $("#board").classList.add("hide");      // house lights down...
   started=true;
   resetIdle();
