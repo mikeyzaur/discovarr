@@ -266,14 +266,31 @@ async def tmdb_title(tmdb_id: int, mtype: MediaType) -> dict:
     }
 
 
+DISCOVER_PAGE_MAX = 15   # quality-bounded random window for the generated reel
+
+
 async def tmdb_discover(mtype: MediaType, params: dict, cap: int) -> list[dict]:
-    """Resolve a generated theme (genre × decade × …) to [{tmdb_id, type}]."""
-    q = {"sort_by": "popularity.desc", "vote_count.gte": 50, "include_adult": "false", **params}
-    r = await client.get(f"{TMDB}/discover/{mtype}", headers=_tmdb_headers(), params=q)
-    if r.status_code != 200:
-        log.error("TMDB discover/%s -> %s %s", mtype, r.status_code, r.text[:200])
-        return []
-    return [{"tmdb_id": x["id"], "type": mtype} for x in r.json().get("results", [])[:cap]]
+    """Resolve a generated theme (genre × decade × …) to [{tmdb_id, type}]. Pulls a
+    RANDOM page within a quality-bounded window (popularity.desc + vote_count.gte,
+    pages 1..DISCOVER_PAGE_MAX) then shuffles — so the reel is fresh per pull rather
+    than the same top slice every time (DECISIONS build-item 9). Falls back to page 1
+    if a narrow combo has fewer pages than the random pick."""
+    base = {"sort_by": "popularity.desc", "vote_count.gte": 50, "include_adult": "false", **params}
+    page = random.randint(1, DISCOVER_PAGE_MAX)
+
+    async def _page(p: int) -> list[dict]:
+        r = await client.get(f"{TMDB}/discover/{mtype}", headers=_tmdb_headers(),
+                             params={**base, "page": p})
+        if r.status_code != 200:
+            log.error("TMDB discover/%s p%s -> %s %s", mtype, p, r.status_code, r.text[:200])
+            return []
+        return r.json().get("results", [])
+
+    results = await _page(page)
+    if not results and page != 1:
+        results = await _page(1)          # overshot total_pages for a sparse combo
+    random.shuffle(results)
+    return [{"tmdb_id": x["id"], "type": mtype} for x in results[:cap]]
 
 
 async def tmdb_recommendations(tmdb_id: int, mtype: MediaType, cap: int) -> list[dict]:
@@ -350,6 +367,7 @@ async def mdblist_list_items(list_id: str, cap: int) -> list[dict]:
         return []
     items = r.json()
     rows = items if isinstance(items, list) else items.get("movies", []) + items.get("shows", [])
+    random.shuffle(rows)          # sample the list rather than its head, re-rolled per pull
     out = []
     for it in rows[:cap]:
         tmdb = it.get("tmdb_id") or it.get("id")
@@ -411,9 +429,13 @@ async def _trakt_user_headers() -> Optional[dict]:
     return {**_trakt_public_headers(), "Authorization": f"Bearer {tok}"}
 
 
+TRENDING_POOL = 100   # sample `cap` from the top ~100 trending, re-rolled per pull
+
+
 async def trakt_trending(mtype: MediaType, cap: int) -> list[dict]:
     path = "movies" if mtype == "movie" else "shows"
-    r = await client.get(f"{TRAKT}/{path}/trending", headers=_trakt_public_headers(), params={"limit": cap})
+    r = await client.get(f"{TRAKT}/{path}/trending", headers=_trakt_public_headers(),
+                         params={"limit": TRENDING_POOL})
     if r.status_code != 200:
         log.warning("Trakt trending %s -> %s", mtype, r.status_code)
         return []
@@ -423,10 +445,10 @@ async def trakt_trending(mtype: MediaType, cap: int) -> list[dict]:
         tmdb = (node.get("ids") or {}).get("tmdb")
         if tmdb:
             out.append({"tmdb_id": tmdb, "type": mtype})
-    return out
+    return random.sample(out, cap) if len(out) > cap else out
 
 
-async def trakt_watchlist() -> list[dict]:
+async def trakt_watchlist(cap: int = 30) -> list[dict]:
     h = await _trakt_user_headers()
     if not h:
         return []
@@ -439,7 +461,8 @@ async def trakt_watchlist() -> list[dict]:
                 tmdb = (node.get("ids") or {}).get("tmdb")
                 if tmdb:
                     out.append({"tmdb_id": tmdb, "type": mtype})
-    return out
+    # Show all if it fits the cap, else shuffle a sample (DECISIONS item 9).
+    return random.sample(out, cap) if len(out) > cap else out
 
 
 async def trakt_watched_ids() -> set[tuple[int, str]]:
@@ -547,7 +570,7 @@ async def resolve_standard(theme: dict, cap: int) -> list[dict]:
     if src == "trakt_trending":
         return await trakt_trending(theme.get("mtype", "movie"), cap)
     if src == "trakt_watchlist":
-        return await trakt_watchlist()
+        return await trakt_watchlist(cap)
     if src == "mdblist":
         return await mdblist_list_items(theme["list_id"], cap)
     if src == "tmdb_discover":
@@ -557,6 +580,50 @@ async def resolve_standard(theme: dict, cap: int) -> list[dict]:
 
 def _filter(ids: list[dict], block: set[tuple[int, str]]) -> list[dict]:
     return [x for x in ids if (x["tmdb_id"], x["type"]) not in block]
+
+
+async def build_generated_reel(limit: int, cap: int, block: set[tuple[int, str]],
+                               ditched: set[str], seen_ids: set[str] = frozenset()) -> list[dict]:
+    """The ↑/↓ generated reel: random themes resolved via discover, with empty/ditched/
+    already-seen themes dropped. Shared by /api/themes and the endless-feed /api/reel/more."""
+    gen = [t for t in await generated_themes(limit, cap)
+           if t["id"] not in ditched and t["id"] not in seen_ids]
+    out = []
+    for th in gen:
+        ids = _filter(await tmdb_discover(th["mtype"], th["params"], cap), block)
+        if ids:
+            out.append({"id": th["id"], "label": th["label"], "titles": ids})
+    return out
+
+
+async def _title_name(tmdb_id: int, mtype: MediaType) -> str:
+    """Just the display title (for a 'Because you watched X' label). build_tile is
+    cached, so this is reused warm and adds no real cost."""
+    try:
+        return (await build_tile(tmdb_id, mtype)).get("title") or "?"
+    except Exception:  # noqa: BLE001
+        return "?"
+
+
+async def because_you_watched(cap: int) -> list[dict]:
+    """2-3 'Because you watched X' rows seeded from RANDOM watched-history titles →
+    recommendations (DECISIONS build-item 6). Cached TTL_THEME (12h) so the seeds
+    rotate per cache cycle, not per pull (bounds API cost). Stored raw/unfiltered;
+    get_themes filters against the live block and interleaves. Empty without Trakt."""
+    cached = cache_get("reel:becausewatched")
+    if cached is not None:
+        return cached
+    watched = await trakt_watched_ids()
+    rows: list[dict] = []
+    if watched:
+        for tid, mt in random.sample(list(watched), min(3, len(watched))):
+            recs = await tmdb_recommendations(tid, mt, cap)
+            if recs:
+                rows.append({"id": f"byw:{mt}:{tid}",
+                             "label": f"Because you watched {await _title_name(tid, mt)}",
+                             "titles": recs})
+    cache_set("reel:becausewatched", rows, TTL_THEME)
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -614,29 +681,60 @@ async def flush_cache():
     return {"cleared": n}
 
 
+@app.post("/api/admin/unexclude-theme")
+async def unexclude_theme(theme_id: str = ""):
+    """Dev convenience: lift a 'ditch this category' ban. Pass ?theme_id=gen:... to clear
+    one, or omit to clear all excluded_themes. Leaves title excludes + Trakt tokens intact."""
+    with db() as c:
+        if theme_id:
+            n = c.execute("DELETE FROM excluded_themes WHERE theme_id = ?", (theme_id,)).rowcount
+        else:
+            n = c.execute("DELETE FROM excluded_themes").rowcount
+    return {"cleared": n}
+
+
 @app.get("/api/themes")
 async def get_themes(limit: int = 10):
     cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
     block = excluded_set() | await trakt_watched_ids()
-
-    standard = CONFIG.get("standard_themes", [])
     ditched = excluded_themes_set()
-    generated = [t for t in await generated_themes(limit, cap) if t["id"] not in ditched]
 
-    out = []
     # Nav-bar standard themes (resolved to first-title preview; rest lazy on the client).
     nav = []
-    for th in standard:
+    for th in CONFIG.get("standard_themes", []):
         ids = _filter(await resolve_standard(th, cap), block)
         nav.append({"id": th.get("id", th.get("label")), "label": th["label"], "titles": ids})
 
-    # ↑/↓ generated reel.
-    for th in generated:
-        ids = _filter(await tmdb_discover(th["mtype"], th["params"], cap), block)
-        if ids:
-            out.append({"id": th["id"], "label": th["label"], "titles": ids})
+    reel = await build_generated_reel(limit, cap, block, ditched)
 
-    return {"nav": nav, "reel": out}
+    # Intersperse 2-3 "Because you watched X" rows — filtered fresh against the live
+    # block each pull (seeds cached 12h), woven in every ~3 generated themes (not clumped).
+    byw = []
+    for row in await because_you_watched(cap):
+        titles = _filter(row["titles"], block)
+        if titles:
+            byw.append({"id": row["id"], "label": row["label"], "titles": titles})
+    merged, bi = [], 0
+    for i, th in enumerate(reel):
+        merged.append(th)
+        if (i + 1) % 3 == 0 and bi < len(byw):
+            merged.append(byw[bi])
+            bi += 1
+    merged.extend(byw[bi:])
+
+    return {"nav": nav, "reel": merged}
+
+
+@app.get("/api/reel/more")
+async def reel_more(limit: int = 5, seen: str = ""):
+    """Endless feed: a fresh batch of generated themes to append when the user scrolls
+    past the last one (DECISIONS item 7). `seen` = comma-separated theme ids already on
+    screen, excluded so the append doesn't repeat; ditched combos excluded too."""
+    cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
+    block = excluded_set() | await trakt_watched_ids()
+    ditched = excluded_themes_set()
+    seen_ids = {s for s in seen.split(",") if s}
+    return {"reel": await build_generated_reel(limit, cap, block, ditched, seen_ids)}
 
 
 @app.post("/api/exclude")
