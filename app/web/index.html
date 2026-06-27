@@ -446,10 +446,11 @@ function paintTitle(t){
     return `<span class="chip">${icon}<span class="val ${rclass(k,v)}">${v}</span></span>`;
   }).join("");
   $("#pmDots").innerHTML = th.titles.map((_,i)=>`<i class="${i===xi?'cur':''}"></i>`).join("");
-  const spillImg = t.backdrop_url || t.poster_url || "";
-  const stillImg = t.poster_url || t.backdrop_url || "";
-  $("#spill").style.backgroundImage  = spillImg ? `url("${spillImg}")` : "";
-  $("#poster").style.backgroundImage = stillImg ? `url("${stillImg}")` : "";
+  // backdrop is native 16:9 → fills the screen sharp; poster (portrait) only as a
+  // fallback. Same image serves the blurred spill, so it's a single fetch.
+  const img = t.backdrop_url || t.poster_url || "";
+  $("#spill").style.backgroundImage  = img ? `url("${img}")` : "";
+  $("#poster").style.backgroundImage = img ? `url("${img}")` : "";
   updateControls(t);
 }
 
@@ -468,7 +469,7 @@ async function land(){
   shownSet.add(key(got.ref));
   paintTitle(got.tile);
   prefetch();
-  settleTimer=setTimeout(()=>{ if(seq===landSeq) playCurrent(seq); }, 1000);   // dwell on poster ~1s
+  settleTimer=setTimeout(()=>{ if(seq===landSeq) playCurrent(seq); }, 650);   // brief dwell on the still before the trailer
 }
 function playCurrent(seq){
   if(seq!=null && seq!==landSeq) return;
@@ -482,6 +483,7 @@ function playCurrent(seq){
 function onState(e){
   if(e.data===YT.PlayerState.PLAYING){
     skips=0; clearTimeout(loadTimeout);
+    try{ player.setPlaybackQuality("hd1080"); }catch(_){}   // best-effort; YouTube ultimately picks adaptively
     $("#screen").classList.remove("buffering"); $("#screen").classList.add("playing");
   }
   if(e.data===YT.PlayerState.ENDED && autoAdvance){ dir=1; goTitle(1); }   // channel loop within theme

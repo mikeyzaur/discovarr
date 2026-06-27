@@ -254,7 +254,7 @@ async def tmdb_title(tmdb_id: int, mtype: MediaType) -> dict:
         "title": title,
         "year": int(date[:4]) if date[:4].isdigit() else None,
         "overview": d.get("overview", ""),
-        "poster_url": f"{IMG}/w500{poster}" if poster else None,
+        "poster_url": f"{IMG}/w780{poster}" if poster else None,
         "backdrop_url": f"{IMG}/w1280{backdrop}" if backdrop else None,
         "trailer_youtube_key": _pick_trailer(d.get("videos")),
         "imdb_id": (d.get("external_ids") or {}).get("imdb_id"),
