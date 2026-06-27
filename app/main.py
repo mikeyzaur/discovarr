@@ -846,7 +846,8 @@ async def get_themes(limit: int = 10):
         ids = _filter(res, block)
         if not ids:            # drop empty/unauthed/rotted rows (e.g. an empty watchlist)
             continue
-        nav.append({"id": th.get("id", th.get("label")), "label": th["label"], "titles": ids})
+        nav.append({"id": th.get("id", th.get("label")), "label": th["label"], "titles": ids,
+                    "ranked": th.get("source") == "trakt_watched"})   # FE shows #N rank badges
 
     # Intersperse 2-3 "Because you watched X" rows — filtered fresh against the live
     # block each pull (seeds cached 12h), woven in every ~3 generated themes (not clumped).

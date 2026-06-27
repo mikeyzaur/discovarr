@@ -126,8 +126,12 @@ button{font-family:inherit;color:inherit;}
 
 /* ---- reel-position marker (you-are-here in the programme) ---------------- */
 #posmark{position:absolute;top:clamp(16px,3vh,30px);left:clamp(20px,5vw,72px);z-index:4;}
+.pm-head{display:flex;align-items:center;gap:9px;margin-bottom:7px;}
 .pm-theme{font-family:var(--display);font-weight:700;text-transform:uppercase;
-  letter-spacing:.2em;font-size:12px;color:var(--marquee);margin-bottom:7px;}
+  letter-spacing:.2em;font-size:12px;color:var(--marquee);}
+.pm-rank{font-family:var(--billing);font-weight:800;font-size:15px;line-height:1;
+  color:var(--auditorium);background:var(--marquee);border-radius:5px;padding:3px 7px 2px;
+  letter-spacing:.01em;}
 .dots{display:flex;gap:5px;flex-wrap:wrap;max-width:60vw;}
 /* auto-hide chrome on idle (desktop) — fades back on any mouse / tap / key */
 #billing,#posmark{transition:opacity .7s ease;}
@@ -240,7 +244,10 @@ body.idle{cursor:none;}
     <div id="cover"></div>
 
     <div id="posmark">
-      <div class="pm-theme" id="pmTheme"></div>
+      <div class="pm-head">
+        <span class="pm-rank" id="pmRank" hidden></span>
+        <div class="pm-theme" id="pmTheme"></div>
+      </div>
       <div class="dots" id="pmDots"></div>
     </div>
 
@@ -469,6 +476,8 @@ function updateControls(t){
 function paintTitle(t){
   const th=themes[ti];
   $("#pmTheme").textContent = th.label;
+  const rank=$("#pmRank");                       // #N badge on the ranked Top 10 chart
+  if(th.ranked){ rank.textContent=`#${xi+1}`; rank.hidden=false; } else rank.hidden=true;
   $("#bGenre").textContent = (t.genres||[]).slice(0,3).join(" · ");
   $("#bTitle").textContent = t.title;
   $("#bYear").textContent = metaStr(t) ? `${t.year||""}${t.year?" · ":""}${metaStr(t)}` : (t.year||"");
@@ -824,7 +833,7 @@ async function init(){
       const [cfg, data] = await Promise.all([ fetchJSON("/api/config"), fetchJSON("/api/themes?limit=10") ]);
       config=cfg;
       const list=[];
-      for(const t of (data.nav||[]))  list.push({id:t.id,label:t.label,kind:"Standard",titles:t.titles||[],spawned:false});
+      for(const t of (data.nav||[]))  list.push({id:t.id,label:t.label,kind:"Standard",titles:t.titles||[],spawned:false,ranked:!!t.ranked});
       for(const t of (data.reel||[])) list.push({id:t.id,label:t.label,kind:kindFor(t.id),titles:t.titles||[],spawned:false});
       const built=list.filter(t=>t.titles.length);   // a theme resolving to zero titles renders not at all
       if(built.length){
