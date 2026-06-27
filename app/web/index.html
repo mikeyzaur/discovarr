@@ -76,7 +76,7 @@ button{font-family:inherit;color:inherit;}
   letter-spacing:.22em;font-size:12px;color:var(--marquee);margin-bottom:6px;}
 .kind .dot{color:var(--ink-dim);margin:0 8px;}
 .genre{font-family:var(--display);font-weight:500;text-transform:uppercase;
-  letter-spacing:.16em;font-size:11px;color:var(--ink-dim);margin:0 0 9px;min-height:11px;}
+  letter-spacing:.16em;font-size:11px;color:var(--ink-dim);margin:11px 0 0;min-height:11px;}
 .overview{font-size:clamp(13px,1.15vw,15.5px);line-height:1.55;color:var(--ink);
   opacity:.84;max-width:66ch;margin:10px 0 0;
   display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
@@ -118,7 +118,13 @@ button{font-family:inherit;color:inherit;}
 
 /* ---- reel-position marker (you-are-here in the programme) ---------------- */
 #posmark{position:absolute;top:clamp(16px,3vh,30px);left:clamp(20px,5vw,72px);z-index:4;}
+.pm-theme{font-family:var(--display);font-weight:700;text-transform:uppercase;
+  letter-spacing:.2em;font-size:12px;color:var(--marquee);margin-bottom:7px;}
 .dots{display:flex;gap:5px;flex-wrap:wrap;max-width:60vw;}
+/* auto-hide chrome on idle (desktop) — fades back on any mouse / tap / key */
+#billing,#posmark{transition:opacity .7s ease;}
+body.idle #billing, body.idle #posmark{opacity:.2;}
+body.idle{cursor:none;}
 .dots i{width:5px;height:5px;border-radius:50%;background:rgba(242,235,223,.22);}
 .dots i.cur{background:var(--marquee);width:16px;border-radius:3px;}
 
@@ -223,15 +229,17 @@ button{font-family:inherit;color:inherit;}
     <div id="spinner"></div>
     <div id="cover"></div>
 
-    <div id="posmark"><div class="dots" id="pmDots"></div></div>
+    <div id="posmark">
+      <div class="pm-theme" id="pmTheme"></div>
+      <div class="dots" id="pmDots"></div>
+    </div>
 
     <div id="billing">
-      <div class="kind" id="bKind"></div>
-      <div class="genre" id="bGenre"></div>
       <div class="title-line">
         <h1 class="title" id="bTitle">—</h1>
         <span class="year" id="bYear"></span>
       </div>
+      <div class="genre" id="bGenre"></div>
       <div class="ratings" id="bRatings"></div>
       <p class="overview" id="bOverview"></p>
       <div class="controls" id="bControls"></div>
@@ -423,7 +431,7 @@ function updateControls(t){
 }
 function paintTitle(t){
   const th=themes[ti];
-  $("#bKind").textContent = th.label;
+  $("#pmTheme").textContent = th.label;
   $("#bGenre").textContent = (t.genres||[]).slice(0,3).join(" · ");
   $("#bTitle").textContent = t.title;
   $("#bYear").textContent = metaStr(t) ? `${t.year||""}${t.year?" · ":""}${metaStr(t)}` : (t.year||"");
@@ -700,12 +708,13 @@ function moveBoard(d){ boardSel=(boardSel+d+themes.length)%themes.length; buildB
 function openBoard(){ boardSel=ti; buildBoard();
   if(started && playerReady) player.pauseVideo();
   $("#board").classList.remove("hide"); }
-function closeBoard(){ $("#board").classList.add("hide");
+function closeBoard(){ $("#board").classList.add("hide"); resetIdle();
   if(started && playerReady){ player.playVideo(); setIcon("pause","pause"); } }
 function startFrom(i){
   ti=i; xi=0; dir=1;
   $("#board").classList.add("hide");      // house lights down...
   started=true;
+  resetIdle();
   setTimeout(land, 350);                  // ...then the projector strikes
 }
 function boardKey(e){
@@ -720,6 +729,7 @@ function showLibraryError(){ started=false; $("#board").classList.remove("hide")
    KEYS
    =========================================================================== */
 document.addEventListener("keydown",e=>{
+  resetIdle();
   if(picker){ pickerKey(e); return; }
   if(boardOpen()){ boardKey(e); return; }
   if(!started) return;
@@ -736,6 +746,15 @@ document.addEventListener("keydown",e=>{
   }
 });
 $("#cover").addEventListener("click",()=>togglePause());      // tap video = pause/play
+
+/* auto-hide the chrome after ~18s idle; any mouse / tap / scroll / key brings it back */
+let idleTimer=null;
+function resetIdle(){
+  document.body.classList.remove("idle");
+  clearTimeout(idleTimer);
+  idleTimer=setTimeout(()=>{ if(started && !boardOpen() && !picker) document.body.classList.add("idle"); }, 18000);
+}
+["mousemove","mousedown","touchstart","wheel"].forEach(ev=>document.addEventListener(ev,resetIdle,{passive:true}));
 
 /* ===========================================================================
    INIT — fetch config + themes, build one unified list (standard → reel, with
