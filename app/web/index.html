@@ -38,10 +38,10 @@ button{font-family:inherit;color:inherit;}
 
 /* SIGNATURE: light-spill. A heavily blurred, oversized copy of the current
    backdrop bleeds out around the screen — the projector lighting the walls. */
-#spill{position:absolute;inset:-12%;background-size:cover;background-position:center;
+.spill{position:absolute;inset:-12%;background-size:cover;background-position:center;
   filter:blur(90px) saturate(1.5) brightness(.62);transform:scale(1.18);
-  opacity:0;transition:opacity 1.1s ease, background-image 0s;z-index:0;}
-#room.lit #spill{opacity:.9;}
+  opacity:0;transition:opacity .6s ease;z-index:0;}
+#room.lit .spill.show{opacity:.9;}
 #vignette{position:absolute;inset:0;z-index:1;pointer-events:none;
   background:radial-gradient(120% 90% at 50% 42%, transparent 38%, rgba(0,0,0,.55) 100%);}
 
@@ -52,9 +52,10 @@ button{font-family:inherit;color:inherit;}
 #player{position:absolute;inset:0;width:100%;height:100%;border:0;}
 /* Transparent cover swallows hover/taps so YouTube chrome never reveals. */
 #cover{position:absolute;inset:0;z-index:3;cursor:pointer;}
-#poster{position:absolute;inset:0;z-index:2;background:#000 center/cover no-repeat;
-  transition:opacity .5s ease;}
-#screen.playing #poster{opacity:0;}
+.poster{position:absolute;inset:0;z-index:2;background:#000 center/cover no-repeat;
+  opacity:0;transition:opacity .45s ease;}
+.poster.show{opacity:1;}
+.poster.gone{opacity:0;}        /* trailer ready — dissolve the still away over the video */
 #spinner{position:absolute;left:50%;top:50%;width:34px;height:34px;z-index:2;
   margin:-17px;border:3px solid rgba(242,235,223,.25);border-top-color:var(--ink);
   border-radius:50%;animation:spin 1s linear infinite;opacity:0;transition:opacity .2s;}
@@ -66,6 +67,8 @@ button{font-family:inherit;color:inherit;}
   padding:64px clamp(20px,5vw,72px) clamp(18px,3.4vh,34px);
   background:linear-gradient(transparent, rgba(8,7,6,.5) 38%, rgba(8,7,6,.94));
   opacity:1;transform:none;pointer-events:auto;}   /* persistent — small enough to stay */
+@keyframes billIn{from{opacity:0;} to{opacity:1;}}
+#billing.in{animation:billIn .35s ease;}   /* fade the metadata in per title — no reflow flash */
 
 .title-line{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;}
 .title{font-family:var(--billing);font-weight:800;text-transform:uppercase;
@@ -220,11 +223,13 @@ body.idle{cursor:none;}
 </head>
 <body>
 <div id="room">
-  <div id="spill"></div>
+  <div class="spill" id="spillA"></div>
+  <div class="spill" id="spillB"></div>
   <div id="vignette"></div>
 
   <div id="screen">
-    <div id="poster"></div>
+    <div class="poster" id="posterA"></div>
+    <div class="poster" id="posterB"></div>
     <div id="player"></div>
     <div id="spinner"></div>
     <div id="cover"></div>
@@ -276,6 +281,17 @@ body.idle{cursor:none;}
 const $ = s => document.querySelector(s);
 const room = $("#room");
 const key = r => `${r.type}:${r.tmdb_id}`;
+
+// Double-buffered still + spill layers so titles CROSS-DISSOLVE instead of hard-cutting.
+const POS=[$("#posterA"),$("#posterB")], SP=[$("#spillA"),$("#spillB")];
+let frontLayer=0;
+function showImages(img){
+  const nx=frontLayer^1, url = img ? `url("${img}")` : "";
+  POS[nx].style.backgroundImage=url; SP[nx].style.backgroundImage=url;
+  POS[nx].classList.remove("gone"); POS[nx].classList.add("show"); SP[nx].classList.add("show");
+  POS[frontLayer].classList.remove("show"); SP[frontLayer].classList.remove("show");
+  frontLayer=nx;
+}
 const CHIP_SRC = {imdb:"IMDb", rt_critic:"RT", rt_audience:"POPCORN", metacritic:"MC", trakt:"TRAKT", letterboxd:"LB"};
 
 async function fetchJSON(u){ const r = await fetch(u); if(!r.ok) throw new Error(r.status); return r.json(); }
@@ -446,11 +462,11 @@ function paintTitle(t){
     return `<span class="chip">${icon}<span class="val ${rclass(k,v)}">${v}</span></span>`;
   }).join("");
   $("#pmDots").innerHTML = th.titles.map((_,i)=>`<i class="${i===xi?'cur':''}"></i>`).join("");
-  // backdrop is native 16:9 → fills the screen sharp; poster (portrait) only as a
-  // fallback. Same image serves the blurred spill, so it's a single fetch.
-  const img = t.backdrop_url || t.poster_url || "";
-  $("#spill").style.backgroundImage  = img ? `url("${img}")` : "";
-  $("#poster").style.backgroundImage = img ? `url("${img}")` : "";
+  // Cross-dissolve the still + (blurred) spill to the new title — backdrop is native
+  // 16:9 and fills the screen sharp; poster is only a fallback. One image, both uses.
+  showImages(t.backdrop_url || t.poster_url || "");
+  // fade the metadata in (re-trigger the animation) so it doesn't hard-flash top-to-bottom
+  const bill=$("#billing"); bill.classList.remove("in"); void bill.offsetWidth; bill.classList.add("in");
   updateControls(t);
 }
 
@@ -461,9 +477,6 @@ async function land(){
   const seq=++landSeq;
   clearTimeout(settleTimer); clearTimeout(loadTimeout); clearTimeout(revealTimer);
   room.classList.add("lit");
-  const ps=$("#poster"); ps.style.transition="none";        // still appears instantly — no fade-in flash
-  $("#screen").classList.remove("playing");
-  void ps.offsetWidth; ps.style.transition="";              // restore for the later crossfade to video
   $("#screen").classList.add("buffering");
   const got=await currentPlayable();
   if(seq!==landSeq) return;                       // superseded by a newer nav
@@ -488,10 +501,10 @@ function onState(e){
     skips=0; clearTimeout(loadTimeout);
     try{ player.setPlaybackQuality("hd1080"); }catch(_){}   // best-effort; YouTube ultimately picks adaptively
     $("#screen").classList.remove("buffering");
-    // hold the backdrop ~300ms past PLAYING so YouTube has rendered real frames
-    // before the crossfade — kills the black "loading" flash between still and trailer.
+    // hold the still ~300ms past PLAYING (YT frame-render lag) then dissolve it away
+    // over the video — no black "loading" flash between still and trailer.
     clearTimeout(revealTimer);
-    revealTimer=setTimeout(()=>{ $("#screen").classList.add("playing"); }, 300);
+    revealTimer=setTimeout(()=>{ POS[frontLayer].classList.add("gone"); }, 300);
   }
   if(e.data===YT.PlayerState.ENDED && autoAdvance){ dir=1; goTitle(1); }   // channel loop within theme
 }
