@@ -26,8 +26,7 @@ autoplay after one Start gesture and auto-advance-keeps-sound, both on iOS. Conc
   SQLite w/ auto-refresh.
 - Seerr request path wired (not yet exercised with a real request).
 
-**Step 2** (theatre frontend) — **DESIGN LOCKED 2026-06-27** (full spec in `DECISIONS.md`;
-runnable visual mock in `design-proto/`, throwaway — delete once Step 2 ships). It carries a
+**Step 2** (theatre frontend) — **BUILT & LIVE 2026-06-27** (full spec in `DECISIONS.md`). It carries a
 backend **"discovery slice"** built first so the FE binds to real endpoints.
 - **Discovery slice cluster 1–3 DONE & verified live 2026-06-27** (commit `6fb185e`):
   `/api/config` (chips + `trakt_authed`); tile now carries `runtime`/season+episode counts +
@@ -49,11 +48,10 @@ backend **"discovery slice"** built first so the FE binds to real endpoints.
   trending/list/watchlist sampling). Plus dev `POST /api/admin/unexclude-theme`. Verified:
   two pulls differ; byw rows labelled from real history; reel/more honours `seen`; unexclude clears.
 - **BACKEND DISCOVERY SLICE COMPLETE (all 11 items).**
-- **THEATRE FRONTEND BUILT 2026-06-27** (`app/web/index.html`, commit `89ffef9` + a long verify
-  pass `d141bef`→`395fbf4`). Replaces the placeholder; full theatre UI on the live API, deployed
-  locally and working end to end. **Mikey is now visual fine-tuning** — see "Frontend — built +
-  tuning" below. `design-proto/` is now superseded — **ready to delete on final sign-off** (kept
-  for A/B for now; do NOT delete without Mikey's say-so).
+- **THEATRE FRONTEND BUILT & LIVE 2026-06-27** (`app/web/index.html`, commit `89ffef9` + verify
+  pass `d141bef`→`395fbf4`, then `/code-review high` fixes `b1cbc7e`). Full theatre UI on the live
+  API, **deployed at `https://discov.arr/` and working end to end** incl. the favicon. The throwaway
+  `design-proto/` visual mock was deleted on sign-off.
 
 ## API surface the frontend binds to (all live + verified)
 
@@ -72,10 +70,11 @@ backend **"discovery slice"** built first so the FE binds to real endpoints.
 - `POST /api/admin/flush` · `POST /api/admin/unexclude-theme[?theme_id=]` (dev).
 - `POST /api/trakt/device` + `/poll` (one-time auth, already done).
 
-## Frontend — built + tuning (`app/web/index.html`)
+## Frontend — built & live (`app/web/index.html`)
 
 Single-file theatre UI to the locked spec, bound to the live API. Built then iterated over a long
-verify pass with Mikey (`89ffef9`, then `d141bef`→`395fbf4`). What's in it:
+verify pass with Mikey (`89ffef9`, then `d141bef`→`395fbf4`), plus a `/code-review high` pass
+(`b1cbc7e` — see "Post-build code review" below). What's in it:
 - Full-bleed reel; **"Tonight's Programme" board** = start gesture + re-summonable jump menu
   (M/Esc); ←/→ titles, ↑/↓ themes; **endless feed** at the bottom; channel-loop auto-advance
   (localStorage); **icon action bar** wired to every live endpoint; **cast / co-director / TV-season
@@ -99,14 +98,21 @@ still-hold floor `2000` + post-playing `1100`; idle `13000`; overscan `9%`/`118%
 picker → Seerr round-trip; whether the overscan `9%` fully hides the title bar / over-crops;
 trailer-quality (YouTube adaptive ramp vs bandwidth — streams device→YouTube, not via discovarr).
 
-**Testing pre-Step-3:** the container binds `127.0.0.1:8001` only. Mikey tests in a browser via a
-**temporary host-side Python TCP bridge** (`0.0.0.0:8011 → 127.0.0.1:8001`) at
-`http://10.13.37.168:8011/` (socat wasn't installed; an inline asyncio proxy is used). Step 3's
-Caddy replaces it — `Ctrl-C` the bridge when done. (SSH `-L` tunnelling fought VS Code's
-auto-port-forwarding on the Mac, hence the host-side bridge.)
+**Post-build code review (`/code-review high`, discovarr `b1cbc7e`).** All findings fixed:
+shared `current_block()` Trakt-watched guard now wraps every feed endpoint (was only `/api/themes`,
+so a Trakt blip used to 500 the endless feed + spawn rows); empty *because-you-watched* no longer
+negative-cached for 12h; season picker no longer hard-codes a "Season 1" (duplicate / phantom-season
+→ Seerr 422); oEmbed 429/5xx and the `doHide`/`doDitch` persistence failures now logged; tile cache
+key bumped to `title:v2:` (Step-1-shaped tiles no longer served without the new fields); cleanups
+(concurrent ratings+oEmbed in `build_tile`, reuse `key()` helper).
 
-**Step 3** (deploy: Caddy `discov.arr` route in arr-stack repo + Pi-hole record + Tailscale DNS
-bounce) — NOT started. Also replaces the temp bridge above.
+## Step 3 — DEPLOYED & LIVE 2026-06-27
+
+`https://discov.arr/` serving end to end. Caddy `discov.arr` route (arr-stack `022c569`,
+`tls internal` → `discovarr-api:8001` over `media_net`) + Pi-hole record `discov.arr → 10.13.37.168`
++ `--build` rebuild — all deployed. The temp host-side test bridge (`0.0.0.0:8011 → 127.0.0.1:8001`)
+is retired. **Gotcha hit:** the arr-stack Caddyfile is bind-mounted `:ro`, so a new route needs
+`docker compose exec caddy caddy reload …`, NOT `up -d` (else `SSL_ERROR_INTERNAL_ERROR_ALERT`).
 
 ## Gotchas learned this session (will bite again)
 
@@ -161,5 +167,4 @@ bounce) — NOT started. Also replaces the temp bridge above.
 - `app/main.py` routes now also include `/api/{config,recommendations,person/{id}/titles,watched,
   exclude-theme,reel/more,admin/unexclude-theme}` (the discovery slice) — the earlier route list
   above is Step-1-only.
-- `design-proto/` — throwaway visual mock; superseded by the built UI. Delete on final sign-off.
 - `trailer-test/` — Step 0 spike (throwaway; keep for re-testing on new devices).

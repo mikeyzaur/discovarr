@@ -141,11 +141,11 @@ over a verify pass with Mikey (`d141bef`→`395fbf4`). Faithful to the lock; the
 - **`/api/request`** extended to accept an optional `seasons:[…]` list for the TV season picker.
 - **Open verify items (not blocking):** iPhone sound-through-auto-advance on real data; season
   picker → Seerr round-trip; overscan % (enough vs over-crop); trailer streaming quality (YouTube
-  adaptive — outside our control). `design-proto/` superseded → delete on final sign-off.
+  adaptive — outside our control). `design-proto/` superseded by the built UI — deleted on sign-off 2026-06-27.
 
 ## Step 2 — theatre frontend (DESIGN LOCKED 2026-06-27)
 Grilled in full and validated against a runnable visual prototype (`design-proto/` — a
-throwaway mock; **delete once Step 2 ships**). This section is canonical and **supersedes the
+throwaway mock, deleted on Step-2 sign-off 2026-06-27). This section is canonical and **supersedes the
 older scattered Step 2 notes** in "Player chrome & controls" and "Hydration / caching" above
 where they differ.
 
@@ -332,7 +332,6 @@ A small **"discovery slice"** rides alongside the frontend.
 - **Top-5 standard themes** — to be grilled separately. Award Winners still needs a real
   MDBList `list_id`; decide whether Trakt Trending includes TV.
 - **TV-remote** button-cramming optimisation — backlogged (browser + iPhone are fine for v1).
-- **`design-proto/`** is throwaway — delete once Step 2 ships.
 
 ## Explicitly deferred
 - iPhone PWA polish / native iOS app — after browser proves out.
