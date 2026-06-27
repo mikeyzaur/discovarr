@@ -380,7 +380,7 @@ function land(){
     if(!playerReady) return;
     player.loadVideoById(c.yt); player.unMute(); player.setVolume(100);
     loadTimeout=setTimeout(()=>{ if($("#screen").classList.contains("buffering")) skipDud("timed out"); },8000);
-  },400);
+  },1000);   /* settle delay — dwell on poster+metadata ~1s before the trailer plays */
 }
 function onState(e){
   if(e.data===YT.PlayerState.PLAYING){
