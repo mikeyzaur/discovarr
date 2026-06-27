@@ -764,19 +764,28 @@ function resetIdle(){
 function kindFor(id){ return id.startsWith("byw:") ? "Personalised" : id.startsWith("gen:") ? "Generated" : "Standard"; }
 async function init(){
   $("#board").classList.remove("error");
-  try{
-    const [cfg, data] = await Promise.all([ fetchJSON("/api/config"), fetchJSON("/api/themes?limit=10") ]);
-    config=cfg;
-    const list=[];
-    for(const t of (data.nav||[]))  list.push({id:t.id,label:t.label,kind:"Standard",titles:t.titles||[],spawned:false});
-    for(const t of (data.reel||[])) list.push({id:t.id,label:t.label,kind:kindFor(t.id),titles:t.titles||[],spawned:false});
-    themes=list.filter(t=>t.titles.length);     // a theme resolving to zero titles renders not at all
-    if(!themes.length){ showLibraryError(); return; }
-    ti=0; xi=0; boardSel=0;
-    await hydrateFirsts();
-    buildBoard();
-    $("#connectHint").classList.toggle("show", !config.trakt_authed);
-  }catch(e){ showLibraryError(); }
+  // The first /api/themes after a refresh is uncached and fires many live upstream
+  // calls — a slow/flaky one can fail it. Auto-retry a few times (the caches warm
+  // between attempts) before falling back to the error board.
+  for(let attempt=1; attempt<=3; attempt++){
+    try{
+      const [cfg, data] = await Promise.all([ fetchJSON("/api/config"), fetchJSON("/api/themes?limit=10") ]);
+      config=cfg;
+      const list=[];
+      for(const t of (data.nav||[]))  list.push({id:t.id,label:t.label,kind:"Standard",titles:t.titles||[],spawned:false});
+      for(const t of (data.reel||[])) list.push({id:t.id,label:t.label,kind:kindFor(t.id),titles:t.titles||[],spawned:false});
+      const built=list.filter(t=>t.titles.length);   // a theme resolving to zero titles renders not at all
+      if(built.length){
+        themes=built; ti=0; xi=0; boardSel=0;
+        await hydrateFirsts();
+        buildBoard();
+        $("#connectHint").classList.toggle("show", !config.trakt_authed);
+        return;
+      }
+    }catch(e){ /* cold start / transient — fall through and retry */ }
+    if(attempt<3) await new Promise(r=>setTimeout(r, 900));
+  }
+  showLibraryError();
 }
 $("#retryBtn").addEventListener("click", init);
 

@@ -280,8 +280,12 @@ async def tmdb_discover(mtype: MediaType, params: dict, cap: int) -> list[dict]:
     page = random.randint(1, DISCOVER_PAGE_MAX)
 
     async def _page(p: int) -> list[dict]:
-        r = await client.get(f"{TMDB}/discover/{mtype}", headers=_tmdb_headers(),
-                             params={**base, "page": p})
+        try:
+            r = await client.get(f"{TMDB}/discover/{mtype}", headers=_tmdb_headers(),
+                                 params={**base, "page": p})
+        except Exception as e:  # noqa: BLE001 — network/timeout: degrade, don't 500 /api/themes
+            log.warning("TMDB discover/%s p%s errored: %s", mtype, p, e)
+            return []
         if r.status_code != 200:
             log.error("TMDB discover/%s p%s -> %s %s", mtype, p, r.status_code, r.text[:200])
             return []
@@ -591,7 +595,10 @@ async def build_generated_reel(limit: int, cap: int, block: set[tuple[int, str]]
            if t["id"] not in ditched and t["id"] not in seen_ids]
     out = []
     for th in gen:
-        ids = _filter(await tmdb_discover(th["mtype"], th["params"], cap), block)
+        try:
+            ids = _filter(await tmdb_discover(th["mtype"], th["params"], cap), block)
+        except Exception as e:  # noqa: BLE001 — one bad theme shouldn't sink the reel
+            log.warning("generated theme %s failed: %s", th["id"], e); continue
         if ids:
             out.append({"id": th["id"], "label": th["label"], "titles": ids})
     return out
@@ -618,11 +625,14 @@ async def because_you_watched(cap: int) -> list[dict]:
     rows: list[dict] = []
     if watched:
         for tid, mt in random.sample(list(watched), min(3, len(watched))):
-            recs = await tmdb_recommendations(tid, mt, cap)
-            if recs:
-                rows.append({"id": f"byw:{mt}:{tid}",
-                             "label": f"Because you watched {await _title_name(tid, mt)}",
-                             "titles": recs})
+            try:
+                recs = await tmdb_recommendations(tid, mt, cap)
+                if recs:
+                    rows.append({"id": f"byw:{mt}:{tid}",
+                                 "label": f"Because you watched {await _title_name(tid, mt)}",
+                                 "titles": recs})
+            except Exception as e:  # noqa: BLE001
+                log.warning("because-you-watched seed %s failed: %s", tid, e)
     cache_set("reel:becausewatched", rows, TTL_THEME)
     return rows
 
@@ -703,13 +713,19 @@ async def unexclude_theme(theme_id: str = ""):
 @app.get("/api/themes")
 async def get_themes(limit: int = 10):
     cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
-    block = excluded_set() | await trakt_watched_ids()
+    try:
+        block = excluded_set() | await trakt_watched_ids()
+    except Exception as e:  # noqa: BLE001 — a Trakt hiccup shouldn't 500 the whole reel
+        log.warning("watched-set fetch failed: %s", e); block = excluded_set()
     ditched = excluded_themes_set()
 
     # Nav-bar standard themes (resolved to first-title preview; rest lazy on the client).
     nav = []
     for th in CONFIG.get("standard_themes", []):
-        ids = _filter(await resolve_standard(th, cap), block)
+        try:
+            ids = _filter(await resolve_standard(th, cap), block)
+        except Exception as e:  # noqa: BLE001
+            log.warning("standard theme %s failed: %s", th.get("id"), e); ids = []
         nav.append({"id": th.get("id", th.get("label")), "label": th["label"], "titles": ids})
 
     reel = await build_generated_reel(limit, cap, block, ditched)
