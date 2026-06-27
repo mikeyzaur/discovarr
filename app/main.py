@@ -507,9 +507,14 @@ async def youtube_oembed_ok(key: str) -> bool:
     try:
         r = await client.get(YT_OEMBED, params={
             "url": f"https://www.youtube.com/watch?v={key}", "format": "json"})
-        if r.status_code != 200:
+        # Only 401 (embedding disabled / private) and 404 (removed) are DEFINITIVE
+        # "dead". Anything else — 429 rate-limit on a burst of probes, 5xx, etc. —
+        # FAILS OPEN (assume playable, let the play-time skip be the backstop), so a
+        # throttled probe never drops a good trailer and empties the reel.
+        if r.status_code in (401, 404):
             log.info("YouTube oEmbed %s -> %s (dropping trailer on load)", key, r.status_code)
-        return r.status_code == 200
+            return False
+        return True
     except Exception as e:  # noqa: BLE001
         log.warning("YouTube oEmbed probe %s errored (%s) — keeping title", key, e)
         return True
