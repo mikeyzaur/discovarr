@@ -436,6 +436,7 @@ async def _trakt_user_headers() -> Optional[dict]:
 
 
 TRENDING_POOL = 100   # sample `cap` from the top ~100 trending, re-rolled per pull
+TV_VOTE_FLOOR = 300   # TV accrues far fewer TMDB votes than film — gentler discover floor
 
 
 async def trakt_trending(mtype: MediaType, cap: int) -> list[dict]:
@@ -452,6 +453,44 @@ async def trakt_trending(mtype: MediaType, cap: int) -> list[dict]:
         if tmdb:
             out.append({"tmdb_id": tmdb, "type": mtype})
     return random.sample(out, cap) if len(out) > cap else out
+
+
+async def trakt_anticipated(mtype: MediaType, cap: int) -> list[dict]:
+    """Most-anticipated UPCOMING titles (Trakt public). Same node shape as trending."""
+    path = "movies" if mtype == "movie" else "shows"
+    r = await client.get(f"{TRAKT}/{path}/anticipated", headers=_trakt_public_headers(),
+                         params={"limit": TRENDING_POOL})
+    if r.status_code != 200:
+        log.warning("Trakt anticipated %s -> %s", mtype, r.status_code)
+        return []
+    out = []
+    for x in r.json():
+        node = x.get("movie") or x.get("show") or {}
+        tmdb = (node.get("ids") or {}).get("tmdb")
+        if tmdb:
+            out.append({"tmdb_id": tmdb, "type": mtype})
+    return random.sample(out, cap) if len(out) > cap else out
+
+
+async def trakt_watched_chart(period: str, cap: int) -> list[dict]:
+    """Trakt most-watched over `period` (weekly/monthly) — the 'Top 10' chart. Movies +
+    shows merged and RANKED by unique-watcher count (no shuffle), so it reads as a countdown."""
+    async def leg(path: str, mt: MediaType) -> list[tuple[int, dict]]:
+        r = await client.get(f"{TRAKT}/{path}/watched/{period}",
+                             headers=_trakt_public_headers(), params={"limit": cap})
+        if r.status_code != 200:
+            log.warning("Trakt watched %s/%s -> %s", path, period, r.status_code)
+            return []
+        rows = []
+        for x in r.json():
+            node = x.get("movie") or x.get("show") or {}
+            tmdb = (node.get("ids") or {}).get("tmdb")
+            if tmdb:
+                rows.append((x.get("watcher_count", 0), {"tmdb_id": tmdb, "type": mt}))
+        return rows
+    movie, tv = await asyncio.gather(leg("movies", "movie"), leg("shows", "tv"))
+    ranked = sorted(movie + tv, key=lambda r: r[0], reverse=True)
+    return [item for _, item in ranked[:cap]]
 
 
 async def trakt_watchlist(cap: int = 30) -> list[dict]:
@@ -586,16 +625,54 @@ async def generated_themes(n: int, cap: int) -> list[dict]:
     return themes
 
 
+async def _merge_types(fetch, mtype: str, cap: int) -> list[dict]:
+    """Resolve a per-type fetcher for movie, tv, or 'both' (fetch each + blend + sample)."""
+    if mtype != "both":
+        return await fetch(mtype, cap)
+    movie, tv = await asyncio.gather(fetch("movie", cap), fetch("tv", cap))
+    merged = movie + tv
+    random.shuffle(merged)
+    return merged[:cap]
+
+
+async def mdblist_lists(list_ids: list[str], cap: int) -> list[dict]:
+    """Merge one or more curated MDBList lists into a single sampled row."""
+    results = await asyncio.gather(*[mdblist_list_items(lid, cap) for lid in list_ids])
+    merged = [it for r in results for it in r]
+    random.shuffle(merged)
+    return merged[:cap]
+
+
+async def discover_resolve(mtype: str, params: dict, cap: int) -> list[dict]:
+    """tmdb_discover for movie, tv, or 'both'. For 'both' a film-tuned vote_count floor is
+    clamped down for the TV leg (TV has far fewer votes) so the TV side isn't starved."""
+    if mtype != "both":
+        return await tmdb_discover(mtype, params, cap)
+    tv_params = dict(params)
+    if "vote_count.gte" in tv_params:
+        tv_params["vote_count.gte"] = min(tv_params["vote_count.gte"], TV_VOTE_FLOOR)
+    movie, tv = await asyncio.gather(tmdb_discover("movie", params, cap),
+                                     tmdb_discover("tv", tv_params, cap))
+    merged = movie + tv
+    random.shuffle(merged)
+    return merged[:cap]
+
+
 async def resolve_standard(theme: dict, cap: int) -> list[dict]:
     src = theme.get("source")
+    mtype = theme.get("mtype", "movie")
     if src == "trakt_trending":
-        return await trakt_trending(theme.get("mtype", "movie"), cap)
+        return await _merge_types(trakt_trending, mtype, cap)
+    if src == "trakt_anticipated":
+        return await _merge_types(trakt_anticipated, mtype, cap)
+    if src == "trakt_watched":
+        return await trakt_watched_chart(theme.get("period", "weekly"), theme.get("cap", cap))
     if src == "trakt_watchlist":
         return await trakt_watchlist(cap)
     if src == "mdblist":
-        return await mdblist_list_items(theme["list_id"], cap)
+        return await mdblist_lists(theme.get("list_ids") or [theme["list_id"]], cap)
     if src == "tmdb_discover":
-        return await tmdb_discover(theme.get("mtype", "movie"), theme.get("params", {}), cap)
+        return await discover_resolve(mtype, theme.get("params", {}), cap)
     return []
 
 
@@ -767,6 +844,8 @@ async def get_themes(limit: int = 10):
         if isinstance(res, Exception):
             log.warning("standard theme %s failed: %s", th.get("id"), res); res = []
         ids = _filter(res, block)
+        if not ids:            # drop empty/unauthed/rotted rows (e.g. an empty watchlist)
+            continue
         nav.append({"id": th.get("id", th.get("label")), "label": th["label"], "titles": ids})
 
     # Intersperse 2-3 "Because you watched X" rows — filtered fresh against the live

@@ -15,30 +15,47 @@ theme_seconds   = 43200        # 12h — list/trending resolutions + watched set
 [ratings]
 chips = ["imdb", "rt_critic", "rt_audience"]   # add "metacritic"/"letterboxd" later
 
-# --- Nav-bar STANDARD themes (fixed, recognisable, jump-to). Edit freely. ---
-# source: trakt_trending | trakt_watchlist | mdblist | tmdb_discover
-[[standard_themes]]
-id = "trending"
-label = "Trakt Trending"
-source = "trakt_trending"
-mtype = "movie"
-
+# --- Nav-bar STANDARD themes (fixed, recognisable, jump-to). ORDER = nav order, and
+#     row 1 is the default landing. A row that resolves empty (e.g. an unauthed/empty
+#     watchlist, or a rotted list) is dropped at serve time. mtype "both" = movies + TV
+#     fetched and blended. ---
+# source: trakt_watchlist | trakt_watched | trakt_trending | trakt_anticipated | tmdb_discover | mdblist
 [[standard_themes]]
 id = "watchlist"
 label = "Your Watchlist"
-source = "trakt_watchlist"
+source = "trakt_watchlist"          # movies + TV; hidden when empty -> you land on Top 10
 
 [[standard_themes]]
-id = "book-to-movie"
-label = "From Book to Movie"
-source = "mdblist"
-list_id = "k0meta/based_on_books_movies"      # https://mdblist.com/lists/k0meta/based_on_books_movies
+id = "top10"
+label = "Top 10 This Week"
+source = "trakt_watched"
+period = "weekly"                   # Trakt most-watched; movies+TV ranked by watcher count
+cap = 10                            # exactly ten, in rank order (no shuffle)
 
 [[standard_themes]]
-id = "award-winners"
-label = "Award Winners"
-source = "mdblist"
-list_id = "REPLACE_WITH_AN_MDBLIST_LIST_ID"   # e.g. a public "Oscar winners" list
+id = "trending"
+label = "Trending"
+source = "trakt_trending"
+mtype = "both"
+
+[[standard_themes]]
+id = "acclaimed"
+label = "Critically Acclaimed"
+source = "tmdb_discover"
+mtype = "both"
+params = { sort_by = "vote_average.desc", "vote_count.gte" = 2000 }   # TV floor auto-clamped to 300
+
+[[standard_themes]]
+id = "based-on-book"
+label = "Based on a Book"
+source = "mdblist"                  # film + TV book adaptations, merged
+list_ids = ["k0meta/based_on_books_movies", "k0meta/based_on_books_shows"]
+
+[[standard_themes]]
+id = "anticipated"
+label = "Anticipated"
+source = "trakt_anticipated"        # most-anticipated upcoming
+mtype = "both"
 
 # --- Generated ↑/↓ reel dimensions (TMDB Discover). genres = TMDB genre ids. ---
 [generated]
