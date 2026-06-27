@@ -269,12 +269,17 @@ A small **"discovery slice"** rides alongside the frontend.
 1. ✅ **`/api/config`** — ratings chips + `trakt_authed` flag (+ any display config the FE needs).
 2. ✅ **Tile contract:** add `runtime` (movie) + `number_of_seasons`/`number_of_episodes` (tv) —
    `append_to_response` already returns them. *(+ specials-stripped `seasons` list, see item 11.)*
-3. **Discovery actions:** recommendations endpoint (more-like-this); credits-based spawns
-   (director via `with_crew`, cast via `with_cast`) + return the cast list (`profile_path`) for
-   the picker.
-4. **Mark watched:** `/api/watched` → Trakt `/sync/history` POST.
-5. **Theme exclusion:** `excluded_themes` table + `/api/exclude-theme` + a filter in
-   `generated_themes()`.
+3. ✅ **Discovery actions** *(cluster 4, commit `0eb5014`)*: `GET /api/recommendations`
+   (more-like-this); `GET /api/person/{id}/titles?role=cast|crew` for the credits-based spawns.
+   **DEVIATION (deliberate):** director/cast use TMDB **`combined_credits`**, NOT discover
+   `with_crew`/`with_cast` — those params don't exist on `/discover/tv`; combined_credits returns
+   the person's real movie+TV filmography (popularity-ranked) in one call. person_id rides on the
+   tile credits (cluster 2). Cast list for the picker already shipped in cluster 2 (item 10).
+4. ✅ **Mark watched** *(cluster 4)*: `POST /api/watched` → Trakt `/sync/history`; also invalidates
+   the cached watched set so the exclusion lands on the next `/api/themes`. *(Wired like the proven
+   `/api/watchlist` path; not yet exercised against real Trakt history.)*
+5. ✅ **Theme exclusion** *(cluster 4)*: `excluded_themes` table + `POST /api/exclude-theme` +
+   a filter in `get_themes` (drops ditched `gen:<label>` combos from the reel).
 6. **"Because you watched":** sample **2–3 random titles** from Trakt watched history →
    recommendations → rows interspersed in the `/api/themes` reel (cached 12h, seeds rotate
    per cache cycle).

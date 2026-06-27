@@ -35,10 +35,17 @@ backend **"discovery slice"** built first so the FE binds to real endpoints.
   `profile_url`) via one `append_to_response`; `trailer_ok` YouTube-oEmbed probe (cached on
   the tile, fails open). Verified: `/api/config` → chips + `trakt_authed:true`; Inception →
   runtime 148 + Nolan + 10 cast; Breaking Bad → 5 seasons/62 eps, specials excluded.
-- **Remaining slice (cluster 4 = NEXT):** recommendations + credits-based *more like this /
-  director / cast* spawns (item 3); mark-watched → Trakt `/sync/history` (4); theme-exclusion
-  `excluded_themes` + `/api/exclude-theme` (5); *Because you watched* seeded rows (6); endless
-  feed re-roll (7); randomised theme resolution (9). Then the theatre `index.html`.
+- **Discovery slice cluster 4 DONE & verified live 2026-06-27** (commit `0eb5014`): items 3,
+  4, 5. `GET /api/recommendations` (more-like-this); `GET /api/person/{id}/titles?role=cast|crew`
+  (director/cast spawns — via `combined_credits`, a deliberate deviation from discover
+  `with_crew/with_cast` which don't exist on `/discover/tv`); `POST /api/watched` → Trakt
+  `/sync/history` (+ invalidates the cached watched set); `POST /api/exclude-theme` +
+  `excluded_themes` table (ditched `gen:` combos filtered out of the reel). Verified: recs→20,
+  Nolan crew→14, DiCaprio cast→22, ditch removes the combo. `/api/watched` not yet run against
+  real Trakt (wired like the proven watchlist path).
+- **Remaining slice (cluster 5 = NEXT):** *Because you watched* random-seeded rows (item 6);
+  endless-feed re-roll (7); randomised theme resolution — quality-bounded random page for
+  discover, shuffle for lists/trending (9). Then the theatre `index.html`.
 
 **Step 3** (deploy: Caddy `discov.arr` route in arr-stack repo + Pi-hole record + Tailscale DNS
 bounce) — NOT started.
