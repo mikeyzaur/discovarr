@@ -262,8 +262,9 @@ const THEMES = [
 const CHIPS = ["imdb","rt_critic","rt_audience"];      // from config.toml [ratings].chips
 const CHIP_SRC = {imdb:"IMDb", rt_critic:"RT", rt_audience:"POPCORN", metacritic:"MC"};
 const thumb = (yt,q="maxresdefault") => `https://img.youtube.com/vi/${yt}/${q}.jpg`;
-// real TMDB poster art (clean + sharp). Production also has backdrop_url (16:9).
-const poster = p => `https://image.tmdb.org/t/p/w780/${p}.jpg`;
+// real TMDB poster art at FULL resolution (the size Plex uses). Production also
+// has backdrop_url (16:9). w500/w780 are the smaller steps; "original" is sharpest.
+const poster = p => `https://image.tmdb.org/t/p/original/${p}.jpg`;
 
 // brand-ish rating glyphs (filled SVG): RT tomato (critic) + popcorn (audience). IMDb = badge.
 const TOMATO='<circle cx="12" cy="14" r="7.5" fill="#FA320A"/><path d="M12.5 7.1c-1.1-2.6.7-4 2.9-4.2-.6 1.9.1 3.6-2.9 4.2z" fill="#57A639"/><path d="M11.7 7c-.2-1.6-1-2.4-2.2-2.8.4 1.3.5 2.2 2.2 2.8z" fill="#57A639"/>';
