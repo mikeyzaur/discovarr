@@ -22,6 +22,7 @@ dashboard's worst time-sink).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import random
 import sqlite3
@@ -598,12 +599,14 @@ async def build_generated_reel(limit: int, cap: int, block: set[tuple[int, str]]
     already-seen themes dropped. Shared by /api/themes and the endless-feed /api/reel/more."""
     gen = [t for t in await generated_themes(limit, cap)
            if t["id"] not in ditched and t["id"] not in seen_ids]
+    # Resolve all themes CONCURRENTLY — sequential awaits made the cold reel slow.
+    resolved = await asyncio.gather(*[tmdb_discover(t["mtype"], t["params"], cap) for t in gen],
+                                    return_exceptions=True)
     out = []
-    for th in gen:
-        try:
-            ids = _filter(await tmdb_discover(th["mtype"], th["params"], cap), block)
-        except Exception as e:  # noqa: BLE001 — one bad theme shouldn't sink the reel
-            log.warning("generated theme %s failed: %s", th["id"], e); continue
+    for th, res in zip(gen, resolved):
+        if isinstance(res, Exception):  # one bad theme shouldn't sink the reel
+            log.warning("generated theme %s failed: %s", th["id"], res); continue
+        ids = _filter(res, block)
         if ids:
             out.append({"id": th["id"], "label": th["label"], "titles": ids})
     return out
@@ -632,15 +635,19 @@ async def because_you_watched(cap: int) -> list[dict]:
         log.warning("because-you-watched watched fetch failed: %s", e); watched = set()
     rows: list[dict] = []
     if watched:
-        for tid, mt in random.sample(list(watched), min(3, len(watched))):
-            try:
-                recs = await tmdb_recommendations(tid, mt, cap)
-                if recs:
-                    rows.append({"id": f"byw:{mt}:{tid}",
-                                 "label": f"Because you watched {await _title_name(tid, mt)}",
-                                 "titles": recs})
-            except Exception as e:  # noqa: BLE001
-                log.warning("because-you-watched seed %s failed: %s", tid, e)
+        async def _seed(tid: int, mt: MediaType) -> Optional[dict]:
+            recs = await tmdb_recommendations(tid, mt, cap)
+            if not recs:
+                return None
+            return {"id": f"byw:{mt}:{tid}",
+                    "label": f"Because you watched {await _title_name(tid, mt)}", "titles": recs}
+        seeds = random.sample(list(watched), min(3, len(watched)))
+        seeded = await asyncio.gather(*[_seed(tid, mt) for tid, mt in seeds], return_exceptions=True)
+        for s in seeded:
+            if isinstance(s, Exception):
+                log.warning("because-you-watched seed failed: %s", s)
+            elif s:
+                rows.append(s)
     cache_set("reel:becausewatched", rows, TTL_THEME)
     return rows
 
@@ -727,16 +734,18 @@ async def get_themes(limit: int = 10):
         log.warning("watched-set fetch failed: %s", e); block = excluded_set()
     ditched = excluded_themes_set()
 
-    # Nav-bar standard themes (resolved to first-title preview; rest lazy on the client).
+    # Nav-bar standard themes + the generated reel, all resolved CONCURRENTLY.
+    standard = CONFIG.get("standard_themes", [])
+    nav_resolved, reel = await asyncio.gather(
+        asyncio.gather(*[resolve_standard(th, cap) for th in standard], return_exceptions=True),
+        build_generated_reel(limit, cap, block, ditched),
+    )
     nav = []
-    for th in CONFIG.get("standard_themes", []):
-        try:
-            ids = _filter(await resolve_standard(th, cap), block)
-        except Exception as e:  # noqa: BLE001
-            log.warning("standard theme %s failed: %s", th.get("id"), e); ids = []
+    for th, res in zip(standard, nav_resolved):
+        if isinstance(res, Exception):
+            log.warning("standard theme %s failed: %s", th.get("id"), res); res = []
+        ids = _filter(res, block)
         nav.append({"id": th.get("id", th.get("label")), "label": th["label"], "titles": ids})
-
-    reel = await build_generated_reel(limit, cap, block, ditched)
 
     # Intersperse 2-3 "Because you watched X" rows — filtered fresh against the live
     # block each pull (seeds cached 12h), woven in every ~3 generated themes (not clumped).
