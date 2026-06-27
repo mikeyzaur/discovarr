@@ -611,9 +611,15 @@ function doAction(k){
   }
 }
 async function doWatchlist(t,k){
+  if(watchlistedSet.has(k)) return removeWatchlist(t,k);        // toggle off if already on
   watchlistedSet.add(k); btn.watchlist.classList.add("on"); toast("Added to <b>Watchlist</b>");
   try{ await postJSON("/api/watchlist",{tmdb_id:t.tmdb_id,type:t.type}); }
   catch(e){ watchlistedSet.delete(k); btn.watchlist.classList.remove("on"); toast("Trakt not connected"); }
+}
+async function removeWatchlist(t,k){
+  watchlistedSet.delete(k); btn.watchlist.classList.remove("on"); toast("Removed from <b>Watchlist</b>");
+  try{ await postJSON("/api/watchlist/remove",{tmdb_id:t.tmdb_id,type:t.type}); }
+  catch(e){ watchlistedSet.add(k); btn.watchlist.classList.add("on"); toast("Couldn't remove — kept it"); }
 }
 function doRequest(t,k){
   if(t.type==="movie") sendRequest(t,k,null);                 // one-click
@@ -832,6 +838,8 @@ async function init(){
     try{
       const [cfg, data] = await Promise.all([ fetchJSON("/api/config"), fetchJSON("/api/themes?limit=10") ]);
       config=cfg;
+      watchlistedSet.clear();                       // seed the watchlist icon's on-state from Trakt
+      for(const [id,ty] of (cfg.watchlist||[])) watchlistedSet.add(key({tmdb_id:id,type:ty}));
       const list=[];
       for(const t of (data.nav||[]))  list.push({id:t.id,label:t.label,kind:"Standard",titles:t.titles||[],spawned:false,ranked:!!t.ranked});
       for(const t of (data.reel||[])) list.push({id:t.id,label:t.label,kind:kindFor(t.id),titles:t.titles||[],spawned:false});

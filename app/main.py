@@ -531,6 +531,32 @@ async def trakt_watched_ids() -> set[tuple[int, str]]:
     return out
 
 
+async def trakt_watchlist_ids() -> set[tuple[int, str]]:
+    """Full watchlist membership set (tmdb_id, type) — powers the watchlist icon's
+    on/off state. Cached like the watched set; invalidated on add/remove. Fails to an
+    empty set (unauthed or a Trakt hiccup) so /api/config never 500s."""
+    cached = cache_get("trakt:watchlist")
+    if cached is not None:
+        return {(i, t) for i, t in cached}
+    h = await _trakt_user_headers()
+    if not h:
+        return set()
+    out: set[tuple[int, str]] = set()
+    for mtype, path in (("movie", "movies"), ("tv", "shows")):
+        try:
+            r = await client.get(f"{TRAKT}/sync/watchlist/{path}", headers=h)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Trakt watchlist ids %s errored: %s", path, e); continue
+        if r.status_code == 200:
+            for x in r.json():
+                node = x.get("movie") or x.get("show") or {}
+                tmdb = (node.get("ids") or {}).get("tmdb")
+                if tmdb:
+                    out.add((tmdb, mtype))
+    cache_set("trakt:watchlist", [list(t) for t in out], TTL_THEME)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Tile contract — merge TMDB + MDBList into the ONE shape the frontend knows.
 # ---------------------------------------------------------------------------
@@ -797,7 +823,9 @@ async def get_config():
     board uses this to show/hide the 'Connect Trakt for your watchlist &
     personalised rows' hint and to degrade gracefully without it)."""
     chips = CONFIG.get("ratings", {}).get("chips", ["imdb", "rt_critic", "rt_audience"])
-    return {"ratings_chips": chips, "trakt_authed": _trakt_tokens() is not None}
+    wl = await trakt_watchlist_ids()   # seed the watchlist icon's on-state at boot
+    return {"ratings_chips": chips, "trakt_authed": _trakt_tokens() is not None,
+            "watchlist": [[i, t] for i, t in wl]}
 
 
 @app.get("/api/title/{tmdb_id}")
@@ -902,6 +930,25 @@ async def add_watchlist(b: ActionBody):
     if r.status_code not in (200, 201):
         log.error("Trakt add watchlist -> %s %s", r.status_code, r.text[:200])
         raise HTTPException(status_code=502, detail="Trakt watchlist failed")
+    with db() as c:
+        c.execute("DELETE FROM cache WHERE key = 'trakt:watchlist'")
+    return {"ok": True}
+
+
+@app.post("/api/watchlist/remove")
+async def remove_watchlist(b: ActionBody):
+    """Remove a title from the Trakt watchlist (the icon-toggle off-path)."""
+    h = await _trakt_user_headers()
+    if not h:
+        raise HTTPException(status_code=401, detail="Trakt not authorised — run device flow")
+    key = "movies" if b.type == "movie" else "shows"
+    r = await client.post(f"{TRAKT}/sync/watchlist/remove", headers=h,
+                          json={key: [{"ids": {"tmdb": b.tmdb_id}}]})
+    if r.status_code not in (200, 201):
+        log.error("Trakt remove watchlist -> %s %s", r.status_code, r.text[:200])
+        raise HTTPException(status_code=502, detail="Trakt watchlist remove failed")
+    with db() as c:
+        c.execute("DELETE FROM cache WHERE key = 'trakt:watchlist'")
     return {"ok": True}
 
 
