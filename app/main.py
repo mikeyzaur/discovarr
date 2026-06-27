@@ -107,6 +107,13 @@ def init_db() -> None:
             "CREATE TABLE IF NOT EXISTS excluded "
             "(tmdb_id INTEGER, type TEXT, added REAL, PRIMARY KEY (tmdb_id, type))"
         )
+        # "Ditch this category" — bans an exact generated theme combo (the gen:<label>
+        # id), NOT a whole genre. Local-only pref Trakt can't express (DECISIONS data
+        # split). theme_id is the reel theme's id, e.g. "gen:1980s Sci-Fi".
+        c.execute(
+            "CREATE TABLE IF NOT EXISTS excluded_themes "
+            "(theme_id TEXT PRIMARY KEY, added REAL)"
+        )
         # Single-user app (handover §3) → one row, id=1.
         c.execute(
             "CREATE TABLE IF NOT EXISTS trakt_tokens "
@@ -135,6 +142,11 @@ def cache_set(key: str, value, ttl: float) -> None:
 def excluded_set() -> set[tuple[int, str]]:
     with db() as c:
         return {(r["tmdb_id"], r["type"]) for r in c.execute("SELECT tmdb_id, type FROM excluded")}
+
+
+def excluded_themes_set() -> set[str]:
+    with db() as c:
+        return {r["theme_id"] for r in c.execute("SELECT theme_id FROM excluded_themes")}
 
 
 # TTLs (seconds) — config-overridable.
@@ -262,6 +274,39 @@ async def tmdb_discover(mtype: MediaType, params: dict, cap: int) -> list[dict]:
         log.error("TMDB discover/%s -> %s %s", mtype, r.status_code, r.text[:200])
         return []
     return [{"tmdb_id": x["id"], "type": mtype} for x in r.json().get("results", [])[:cap]]
+
+
+async def tmdb_recommendations(tmdb_id: int, mtype: MediaType, cap: int) -> list[dict]:
+    """'More like this' — TMDB recommendations for a title (same media type)."""
+    r = await client.get(f"{TMDB}/{mtype}/{tmdb_id}/recommendations", headers=_tmdb_headers())
+    if r.status_code != 200:
+        log.warning("TMDB recommendations %s/%s -> %s %s", mtype, tmdb_id, r.status_code, r.text[:120])
+        return []
+    return [{"tmdb_id": x["id"], "type": mtype} for x in r.json().get("results", [])[:cap]]
+
+
+async def tmdb_person_titles(person_id: int, role: Literal["cast", "crew"], cap: int) -> list[dict]:
+    """'More from director' / 'More with cast member'. Uses combined_credits (movie+TV
+    in one call, popularity-ranked) rather than discover with_crew/with_cast — those
+    don't exist on /discover/tv, and combined_credits gives the person's actual body of
+    work across both media in a single request. role=crew is filtered to Director."""
+    r = await client.get(f"{TMDB}/person/{person_id}/combined_credits", headers=_tmdb_headers())
+    if r.status_code != 200:
+        log.warning("TMDB person %s combined_credits -> %s %s", person_id, r.status_code, r.text[:120])
+        return []
+    entries = r.json().get(role, []) or []
+    if role == "crew":
+        entries = [e for e in entries if e.get("job") == "Director"]
+    out, seen = [], set()
+    for e in sorted(entries, key=lambda x: x.get("popularity", 0), reverse=True):
+        tid = e.get("id")
+        mt: MediaType = "tv" if e.get("media_type") == "tv" else "movie"
+        if tid and (tid, mt) not in seen:
+            seen.add((tid, mt))
+            out.append({"tmdb_id": tid, "type": mt})
+        if len(out) >= cap:
+            break
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -522,6 +567,10 @@ class ActionBody(BaseModel):
     type: MediaType
 
 
+class ExcludeThemeBody(BaseModel):
+    theme_id: str
+
+
 @app.get("/api/health")
 async def health():
     out = {}
@@ -571,7 +620,8 @@ async def get_themes(limit: int = 10):
     block = excluded_set() | await trakt_watched_ids()
 
     standard = CONFIG.get("standard_themes", [])
-    generated = await generated_themes(limit, cap)
+    ditched = excluded_themes_set()
+    generated = [t for t in await generated_themes(limit, cap) if t["id"] not in ditched]
 
     out = []
     # Nav-bar standard themes (resolved to first-title preview; rest lazy on the client).
@@ -623,6 +673,52 @@ async def request_title(b: ActionBody):
     if r.status_code not in (200, 201):
         log.error("Seerr request -> %s %s", r.status_code, r.text[:200])
         raise HTTPException(status_code=502, detail="Seerr request failed")
+    return {"ok": True}
+
+
+@app.get("/api/recommendations")
+async def recommendations(tmdb_id: int, type: MediaType = "movie"):
+    """'More like this' spawn seed — recommendations for a title, post-filtered by
+    watched ∪ excluded (the frontend additionally de-dupes already-shown)."""
+    cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
+    block = excluded_set() | await trakt_watched_ids()
+    return {"titles": _filter(await tmdb_recommendations(tmdb_id, type, cap), block)}
+
+
+@app.get("/api/person/{person_id}/titles")
+async def person_titles(person_id: int, role: Literal["cast", "crew"] = "cast"):
+    """'More from director' (role=crew→Director) / 'More with cast member' (role=cast)
+    spawn seed. person_id comes from the credits already on the tile."""
+    cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
+    block = excluded_set() | await trakt_watched_ids()
+    return {"titles": _filter(await tmdb_person_titles(person_id, role, cap), block)}
+
+
+@app.post("/api/watched")
+async def mark_watched(b: ActionBody):
+    """Mark watched → Trakt /sync/history (canonical). Invalidates the cached watched
+    set so the exclusion lands on the next /api/themes; the frontend also drops the
+    title optimistically this session (DECISIONS live-mutation)."""
+    h = await _trakt_user_headers()
+    if not h:
+        raise HTTPException(status_code=401, detail="Trakt not authorised — run device flow")
+    key = "movies" if b.type == "movie" else "shows"
+    r = await client.post(f"{TRAKT}/sync/history", headers=h,
+                          json={key: [{"ids": {"tmdb": b.tmdb_id}}]})
+    if r.status_code not in (200, 201):
+        log.error("Trakt mark watched -> %s %s", r.status_code, r.text[:200])
+        raise HTTPException(status_code=502, detail="Trakt history failed")
+    with db() as c:
+        c.execute("DELETE FROM cache WHERE key = 'trakt:watched'")
+    return {"ok": True}
+
+
+@app.post("/api/exclude-theme")
+async def exclude_theme(b: ExcludeThemeBody):
+    """'Ditch this category' — bans the exact generated theme combo (local-only)."""
+    with db() as c:
+        c.execute("INSERT OR REPLACE INTO excluded_themes (theme_id, added) VALUES (?, ?)",
+                  (b.theme_id, time.time()))
     return {"ok": True}
 
 
