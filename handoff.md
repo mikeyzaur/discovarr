@@ -26,8 +26,13 @@ autoplay after one Start gesture and auto-advance-keeps-sound, both on iOS. Conc
   SQLite w/ auto-refresh.
 - Seerr request path wired (not yet exercised with a real request).
 
-**Step 2** (theatre frontend) and **Step 3** (deploy: Caddy `discov.arr` route in arr-stack
-repo + Pi-hole record + Tailscale DNS bounce) — NOT started. This is the next work.
+**Step 2** (theatre frontend) — **DESIGN LOCKED 2026-06-27** (full spec in `DECISIONS.md`;
+runnable visual mock in `design-proto/`, throwaway — delete once Step 2 ships). Build not
+started — that's the next work, and it now includes a small backend **"discovery slice"**
+(per `DECISIONS.md`: `/api/config`; `runtime`/season counts on the tile;
+recommendations/credits-based *more like this / director / cast*; mark-watched → Trakt;
+theme-exclusion; *Because you watched*; endless feed). **Step 3** (deploy: Caddy `discov.arr`
+route in arr-stack repo + Pi-hole record + Tailscale DNS bounce) — NOT started.
 
 ## Gotchas learned this session (will bite again)
 
