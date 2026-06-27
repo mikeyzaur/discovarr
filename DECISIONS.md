@@ -196,9 +196,67 @@ badge, RT tomato (critic), popcorn (audience). **Light** good/ok/bad quality tin
   `original`) for the still. Not `original` everywhere (multi-MB). Never YouTube thumbnails for
   stills (sharp-but-texty vs clean-but-soft — only TMDB gives clean + sharp).
 
+### Edge-cases, lifecycle & interactions (scope-creep grill — locked 2026-06-27)
+- **Spawned themes (more like this / director / cast):** insert the new row **immediately below
+  the current theme** and jump in; **session-persistent** (survives scrolling away; gone on
+  return to the board / new session); **recursion allowed** (spawn from a spawn), guarded only
+  by **de-duping titles already shown this session**; **pinned** — the endless feed only appends
+  fresh *generated* themes at the bottom, never re-rolls a spawn away; labelled by provenance.
+- **Empty / degraded states:** (1) **any theme resolving to zero titles renders not at all** —
+  no empty rows, ever (standard, generated, spawned, because-you-watched alike). (2) **Degrades
+  without Trakt:** watchlist + because-you-watched just don't appear, watched-exclusion is empty,
+  the reel runs on generated + public Trending; a Trakt *write* that 401s → toast *"Trakt not
+  connected"* + no-op; a `trakt_authed` flag on `/api/config` lets the board show a subtle
+  *"Connect Trakt for your watchlist & personalised rows"* hint. (3) a title that won't hydrate
+  or won't play is a **dud** → skip in the direction of travel; ~8-skip cap → *"Nothing playable
+  here right now — ↓ for the next theme."* (4) **Total failure** (`/api/themes` errors/empty) →
+  the board shows *"Can't reach your library right now"* + **Retry**, never a blank screen;
+  endless-feed fetch failure → toast *"Couldn't load more — retry."*
+- **Failed trailers DROPPED ON LOAD, not skipped:** a cached **`trailer_ok`** flag (set by a
+  YouTube **oEmbed** probe in `build_tile`) lets the frontend **exclude dead / non-embeddable /
+  no-trailer titles from a theme's navigable list as it hydrates** — you never land on them. The
+  play-time skip remains ONLY as the safety net for the rare **age-gated** case oEmbed can't catch.
+- **Randomised pull from big pools:** when a source pool exceeds the 30 cap, **sample** rather
+  than take the top slice, re-rolled per pull — generated (TMDB discover) = a **random page
+  within a quality-bounded window** (≈pages 1–15, keep `vote_count.gte`) then shuffle; MDBList
+  lists = shuffle + take 30; Trakt trending = sample 30 from the top ≈100; watchlist = show all
+  if it fits, else shuffle. Pairs with the endless feed; watched/excluded + de-dupe stop repeats.
+- **Live optimistic mutation (no reload):** mark-watched + not-for-me remove the title from
+  **every loaded theme** in the session at once (can't reappear via wrap or elsewhere); ditch
+  removes the theme; a removal that empties the current theme → move to the next. **Backend
+  writes are the durable record for next session.** Local writes (hide/ditch) apply immediately;
+  the Trakt write (watched) is optimistic with **rollback + toast on failure**. Watchlist/Request
+  do **not** change feed membership — only the icon fills.
+- **Cast picker:** the cast icon opens a centred overlay strip of the **top ~10 billed cast**
+  (circular headshots from `profile_path`; silhouette + initials when none). Trailer **pauses**
+  while open, resumes on dismiss-without-pick. ←/→ to move, Enter to pick, Esc/Back/tap-outside
+  to dismiss, tap a face on mobile; marquee-amber focus ring. Pick → spawn *"More with [Actor]."*
+  **No usable cast → the cast icon is disabled/greyed** (toast *"No cast info available"*).
+  **Director: direct-spawn for a single director; the same picker only for 2+ co-directors.**
+- **Action tooltips:** on hover the director icon resolves to **"More from [name]"** (co-directors
+  → *"More from the directors"*); cast = *"Choose a cast member."* This means **credits ride on
+  the tile** (`append_to_response=credits`: director + top-10 cast w/ headshots) so the tooltip,
+  picker and spawns need **no extra click-time fetch**. Clicking the director / picking an actor
+  **auto-jumps into the spawned row**.
+- **"Because you watched" = RANDOM seeds:** 2–3 **random** titles sampled from your Trakt watched
+  history (de-duped by show) → recommendations rows, filtered (watched ∪ excluded ∪ already-shown)
+  + sampled, interspersed. Cached 12h (seeds rotate per cache cycle, **not** every pull, to keep
+  API cost sane); absent with no Trakt/history.
+- **Phone = portrait-first, landscape optional.** Portrait (primary) = 16:9 video pinned top +
+  a **stacked** info area (eyebrow, title, year · runtime/seasons, ratings, overview, icon bar)
+  over the blurred spill, **swipe** to navigate (←/→ title, ↑/↓ theme). The full-bleed letterbox
+  = desktop, TV, and phone-if-rotated. Deep portrait polish + TV-remote → still backlogged.
+- **Requests:** **react-on-click only for v1** — no per-title Seerr status pre-check; the Request
+  icon reflects this session's actions; a Seerr 409 (already requested/available) = friendly
+  success toast. (Bulk-cached "owned/requested" badges = deferred enhancement.) **Movies =
+  one-click.** **TV = a season picker** (same overlay family): quick *"Season 1"* + *"All
+  seasons"* on top, then individual seasons (number + episode count), **default focus Season 1**;
+  selection → Seerr `seasons:[…]`. The tile carries a compact **seasons list** (number +
+  episode_count) for the picker. Trakt "next-unwatched-season" smart-default = deferred.
+
 ### Build-time backend additions surfaced by the grill (Step 2 is NOT frontend-only)
 A small **"discovery slice"** rides alongside the frontend:
-1. **`/api/config`** — ratings chips (+ any display config the FE needs).
+1. **`/api/config`** — ratings chips + `trakt_authed` flag (+ any display config the FE needs).
 2. **Tile contract:** add `runtime` (movie) + `number_of_seasons`/`number_of_episodes` (tv) —
    `append_to_response` already returns them.
 3. **Discovery actions:** recommendations endpoint (more-like-this); credits-based spawns
@@ -207,10 +265,19 @@ A small **"discovery slice"** rides alongside the frontend:
 4. **Mark watched:** `/api/watched` → Trakt `/sync/history` POST.
 5. **Theme exclusion:** `excluded_themes` table + `/api/exclude-theme` + a filter in
    `generated_themes()`.
-6. **"Because you watched":** fetch recent Trakt history → recommendations → 2–3 seeded themes
-   interspersed in the `/api/themes` reel.
+6. **"Because you watched":** sample **2–3 random titles** from Trakt watched history →
+   recommendations → rows interspersed in the `/api/themes` reel (cached 12h, seeds rotate
+   per cache cycle).
 7. **Endless feed:** a re-call of `/api/themes` appends a fresh generated batch (consider
    excluding already-seen / ditched themes).
+8. **`trailer_ok` via YouTube oEmbed** probe in `build_tile` (cached) → drop-on-load of dead/
+   non-embeddable trailers.
+9. **Randomised theme resolution:** quality-bounded random page for discover; shuffle for
+   MDBList lists / trending / oversized watchlist (sample to the cap, re-rolled per pull).
+10. **Credits on the tile** (`append_to_response=credits`): director + top-10 cast w/
+    `profile_path` — powers the tooltip, cast picker and director/cast spawns with no extra call.
+11. **Seasons list on the tile** (season number + `episode_count`) for the TV request picker;
+    request sends `seasons:[…]`.
 
 ### Open / deferred (NOT part of this lock)
 - **Top-5 standard themes** — to be grilled separately. Award Winners still needs a real
