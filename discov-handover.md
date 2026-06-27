@@ -1,5 +1,12 @@
 # `discov` — Claude Code Handover
 
+> **HISTORICAL — the original concept brief (pre-build).** discovarr shipped **v1.0 (tagged
+> 2026-06-27, maintenance-only)**; this is kept for provenance only. For current truth see
+> [`DECISIONS.md`](DECISIONS.md) (grilled design + as-built), [`handoff.md`](handoff.md)
+> (current-state pointer), and the operations manual
+> [`homelab-kb/apps/discovarr-operations.md`](https://github.com/mikeyzaur/homelab-kb/blob/main/apps/discovarr-operations.md).
+> The name settled as `discovarr` (`discov.arr`), not `discov`.
+
 A trailer-first discovery app for the homelab. **Theatre-mode trailer reel**, organised as
 a 2-axis grid you navigate with arrow keys / a TV remote. The whole point: replace the
 "Netflix browsing" experience (find new TV/movies to watch) without a subscription, and feed
