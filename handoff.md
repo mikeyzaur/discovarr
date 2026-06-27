@@ -48,9 +48,12 @@ backend **"discovery slice"** built first so the FE binds to real endpoints.
   `GET /api/reel/more?limit&seen=`; randomised theme resolution (random discover page + shuffle,
   trending/list/watchlist sampling). Plus dev `POST /api/admin/unexclude-theme`. Verified:
   two pulls differ; byw rows labelled from real history; reel/more honours `seen`; unexclude clears.
-- **THE BACKEND DISCOVERY SLICE IS COMPLETE (all 11 items).** The ONLY remaining Step-2 work is
-  the theatre **`app/web/index.html`** (currently a 29-line placeholder) built to the locked spec
-  in `DECISIONS.md` "Step 2", using `design-proto/` as the visual reference (delete proto once shipped).
+- **BACKEND DISCOVERY SLICE COMPLETE (all 11 items).**
+- **THEATRE FRONTEND BUILT 2026-06-27** (`app/web/index.html`, commit `89ffef9` + a long verify
+  pass `d141bef`→`395fbf4`). Replaces the placeholder; full theatre UI on the live API, deployed
+  locally and working end to end. **Mikey is now visual fine-tuning** — see "Frontend — built +
+  tuning" below. `design-proto/` is now superseded — **ready to delete on final sign-off** (kept
+  for A/B for now; do NOT delete without Mikey's say-so).
 
 ## API surface the frontend binds to (all live + verified)
 
@@ -62,14 +65,48 @@ backend **"discovery slice"** built first so the FE binds to real endpoints.
   **seasons**/**credits{directors,cast[id,name,profile_url]}**/ratings/awards/requested).
 - `GET /api/recommendations?tmdb_id&type` → `{titles:[…]}` (more like this).
 - `GET /api/person/{person_id}/titles?role=cast|crew` → `{titles:[…]}` (cast / director spawn).
-- `POST /api/watchlist` · `POST /api/request` (TV adds `seasons:"all"` — picker will send a list) ·
-  `POST /api/watched` · `POST /api/exclude` (hide title) · `POST /api/exclude-theme` — body
-  `{tmdb_id,type}` except exclude-theme `{theme_id}`.
+- `POST /api/watchlist` · `POST /api/request` (body now accepts optional `seasons:[…]` for TV;
+  omitted/empty → all — the season picker sends a list) · `POST /api/watched` ·
+  `POST /api/exclude` (hide title) · `POST /api/exclude-theme` — body `{tmdb_id,type}` except
+  exclude-theme `{theme_id}`.
 - `POST /api/admin/flush` · `POST /api/admin/unexclude-theme[?theme_id=]` (dev).
 - `POST /api/trakt/device` + `/poll` (one-time auth, already done).
 
+## Frontend — built + tuning (`app/web/index.html`)
+
+Single-file theatre UI to the locked spec, bound to the live API. Built then iterated over a long
+verify pass with Mikey (`89ffef9`, then `d141bef`→`395fbf4`). What's in it:
+- Full-bleed reel; **"Tonight's Programme" board** = start gesture + re-summonable jump menu
+  (M/Esc); ←/→ titles, ↑/↓ themes; **endless feed** at the bottom; channel-loop auto-advance
+  (localStorage); **icon action bar** wired to every live endpoint; **cast / co-director / TV-season
+  pickers**; **spawned rows**; **idle chrome auto-hide** (13s → cursor hidden, chrome → ~20%).
+- **Hydration:** tiles on demand + in-session cache + **image preload**; first-of-each-theme on
+  boot; prefetch ±2 + neighbouring themes; **drop-on-load** of no-trailer / `trailer_ok:false`.
+- **Layout (verify):** theme name (amber) top-left above the position dots; genre line below the title.
+- **Transitions (verify):** preloaded **double-buffered cross-dissolve** between titles (still +
+  blurred spill); metadata fades in; **2s minimum still-hold** for consistent pacing; **pause the
+  outgoing trailer on nav** (clean cut); **iframe forced black + overscanned ~9%** to clip YouTube's
+  title/share chrome; still held **~1.1s into playback** so YT's startup play/pause flash stays
+  behind the poster.
+- **Robust cold load (verify):** init **auto-retries 6×/~7s**; backend `/api/themes` resolves
+  upstreams **CONCURRENTLY** (cold ~4s vs old ~15s) and degrades per-theme instead of 500-ing;
+  oEmbed probe **fails open** except 401/404 (a 429 burst was wrongly dropping good trailers).
+
+**Tuning knobs (all one-liners in `index.html`; Mikey is dialling these):** dissolve `.5s`;
+still-hold floor `2000` + post-playing `1100`; idle `13000`; overscan `9%`/`118%`; settle `650`.
+
+**Still to confirm (not blocking):** iPhone sound-through-auto-advance on real data; TV season
+picker → Seerr round-trip; whether the overscan `9%` fully hides the title bar / over-crops;
+trailer-quality (YouTube adaptive ramp vs bandwidth — streams device→YouTube, not via discovarr).
+
+**Testing pre-Step-3:** the container binds `127.0.0.1:8001` only. Mikey tests in a browser via a
+**temporary host-side Python TCP bridge** (`0.0.0.0:8011 → 127.0.0.1:8001`) at
+`http://10.13.37.168:8011/` (socat wasn't installed; an inline asyncio proxy is used). Step 3's
+Caddy replaces it — `Ctrl-C` the bridge when done. (SSH `-L` tunnelling fought VS Code's
+auto-port-forwarding on the Mac, hence the host-side bridge.)
+
 **Step 3** (deploy: Caddy `discov.arr` route in arr-stack repo + Pi-hole record + Tailscale DNS
-bounce) — NOT started.
+bounce) — NOT started. Also replaces the temp bridge above.
 
 ## Gotchas learned this session (will bite again)
 
@@ -119,7 +156,10 @@ bounce) — NOT started.
   per-theme cap. (Award Winners `list_id` still a placeholder.)
 - `app/docker-compose.yml` — `name: discovarr`, container `discovarr-api`, port 8001, network
   `arr-stack_media_net` (external), volume `discovarr_db`.
-- `app/web/index.html` — placeholder; **Step 2 replaces it** with the theatre UI (per the
-  player requirements in `DECISIONS.md`: hide title/share via poster-fade, pause on Space +
-  remote OK, clean chrome).
+- `app/web/index.html` — **the built theatre UI** (was the placeholder). Single-file HTML/CSS/JS;
+  state machine + double-buffered crossfade + YT IFrame player + the pickers/board. Grep, not lines.
+- `app/main.py` routes now also include `/api/{config,recommendations,person/{id}/titles,watched,
+  exclude-theme,reel/more,admin/unexclude-theme}` (the discovery slice) — the earlier route list
+  above is Step-1-only.
+- `design-proto/` — throwaway visual mock; superseded by the built UI. Delete on final sign-off.
 - `trailer-test/` — Step 0 spike (throwaway; keep for re-testing on new devices).

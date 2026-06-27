@@ -5,7 +5,8 @@ open assumptions don't get silently re-litigated.
 
 ## Build spine
 **Step 0** trailer spike ✅ → **Step 1** full backend + all four APIs ✅ → **Step 2** theatre
-frontend (**DESIGN LOCKED 2026-06-27**) → **Step 3** deploy (Caddy + Pi-hole + Tailscale).
+frontend + discovery slice (**BUILT 2026-06-27**, in visual fine-tuning) → **Step 3** deploy
+(Caddy + Pi-hole + Tailscale).
 Decided *not* to stage the APIs —
 bring the whole data layer in at Step 1 rather than half-building it.
 
@@ -116,6 +117,31 @@ All four upstreams working end to end (`discovarr-api`, port 8001):
 - Pi-hole local DNS `discov.arr → 10.13.37.168` (v6 `pihole.toml dns.hosts`, not `custom.list`).
 - Tailscale `.arr` cache gotcha: bounce `accept-dns` on clients after adding the record.
 - State: SQLite `/data/discovarr.db` on a persistent volume.
+
+## Step 2 — AS BUILT (2026-06-27, in visual fine-tuning)
+The locked spec below was built into `app/web/index.html` (commit `89ffef9`) and then iterated
+over a verify pass with Mikey (`d141bef`→`395fbf4`). Faithful to the lock; the build-time
+**decisions/deviations** worth recording:
+- **Director/cast spawns** use TMDB **`combined_credits`**, NOT discover `with_crew`/`with_cast`
+  (those don't exist on `/discover/tv`) — same "more from X" outcome, real movie+TV filmography.
+- **oEmbed `trailer_ok`** fails OPEN except on 401/404 — a burst of probes (e.g. after a cache
+  flush) gets 429-rate-limited by YouTube, and treating that as "dead" was emptying the reel.
+- **`/api/themes` resolves upstreams CONCURRENTLY** (asyncio.gather) + degrades per-theme — the
+  sequential cold version took ~15s (caused reload-to-load); now ~4s cold / ~1s warm. Frontend
+  also auto-retries the cold load 6×/~7s.
+- **Still = native 16:9 backdrop** (w1280), not the portrait poster (w780, kept for board/fallback)
+  — a cropped portrait on the 16:9 screen looked poor.
+- **Transitions:** preloaded double-buffered **cross-dissolve** (a directional slide was tried and
+  rejected — looked cheap); **2s minimum still-hold** for consistent pacing regardless of trailer
+  load speed; **pause outgoing trailer on nav**; **iframe forced black + overscanned ~9%** to clip
+  YouTube's title/share chrome (minor zoom — the lock's sanctioned fallback); still held ~1.1s into
+  playback so YT's startup play/pause flash stays behind the poster.
+- **Layout tweak:** theme name (amber) moved to the top-left position marker; genre line under the
+  title (not above). **Idle chrome auto-hide** added (13s → cursor hidden, chrome → ~20%).
+- **`/api/request`** extended to accept an optional `seasons:[…]` list for the TV season picker.
+- **Open verify items (not blocking):** iPhone sound-through-auto-advance on real data; season
+  picker → Seerr round-trip; overscan % (enough vs over-crop); trailer streaming quality (YouTube
+  adaptive — outside our control). `design-proto/` superseded → delete on final sign-off.
 
 ## Step 2 — theatre frontend (DESIGN LOCKED 2026-06-27)
 Grilled in full and validated against a runnable visual prototype (`design-proto/` — a
