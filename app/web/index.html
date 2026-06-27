@@ -494,6 +494,7 @@ async function land(){
   const seq=++landSeq;
   landTime=performance.now();
   clearTimeout(settleTimer); clearTimeout(loadTimeout); clearTimeout(revealTimer);
+  if(started && playerReady){ try{ player.pauseVideo(); }catch(_){} }   // cut the old trailer cleanly before the dissolve
   room.classList.add("lit");
   $("#screen").classList.add("buffering");
   const got=await currentPlayable();
@@ -519,11 +520,11 @@ function onState(e){
     skips=0; clearTimeout(loadTimeout);
     try{ player.setPlaybackQuality("hd1080"); }catch(_){}   // best-effort; YouTube ultimately picks adaptively
     $("#screen").classList.remove("buffering");
-    // Keep the still up at least ~2s total (consistent pacing no matter how fast the
-    // trailer buffered), and never less than 300ms past PLAYING (YT frame-render lag),
-    // then dissolve it away over the video.
+    // Keep the still up until the trailer is ~1.1s INTO playback (audio already running)
+    // so YouTube's startup chrome — the play/pause flash + title bar — happens behind the
+    // poster; also at least ~2s total from landing for consistent pacing. Then dissolve.
     clearTimeout(revealTimer);
-    const delay=Math.max(300, 2000-(performance.now()-landTime));
+    const delay=Math.max(1100, 2000-(performance.now()-landTime));
     revealTimer=setTimeout(()=>{ POS[frontLayer].classList.add("gone"); }, delay);
   }
   if(e.data===YT.PlayerState.ENDED && autoAdvance){ dir=1; goTitle(1); }   // channel loop within theme
