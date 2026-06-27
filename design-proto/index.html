@@ -189,7 +189,6 @@ button{font-family:inherit;color:inherit;}
 
     <!-- reel position -->
     <div id="posmark">
-      <div class="pm-theme" id="pmTheme">—</div>
       <div class="pm-sub" id="pmSub">—</div>
       <div class="dots" id="pmDots"></div>
     </div>
@@ -336,7 +335,7 @@ function renderControls(){
 }
 function paintTitle(){
   const c=cur(), th=THEMES[ti];
-  $("#bKind").innerHTML = `${th.label} <span class="dot">/</span> ${th.kind}`;
+  $("#bKind").textContent = th.label;          // theme name only — no kind/id suffix
   $("#bTitle").textContent=c.t;
   $("#bYear").textContent=c.y;
   $("#bOverview").textContent=c.o;
@@ -349,16 +348,18 @@ function paintTitle(){
     return `<span class="chip">${icon}<span class="val ${rclass(k,v)}">${v}</span></span>`;
   }).join("");
   // position marker
-  $("#pmTheme").textContent=th.label;
   $("#pmSub").textContent=`Title ${xi+1} / ${th.titles.length}`;
   $("#pmDots").innerHTML=th.titles.map((_,i)=>`<i class="${i===xi?'cur':''}"></i>`).join("");
-  // poster + spill (both from the YT thumbnail)
-  const img=new Image();
-  img.onload=()=>{ $("#poster").style.backgroundImage=`url(${thumb(c.yt)})`;
-                   $("#spill").style.backgroundImage=`url(${thumb(c.yt,"hqdefault")})`; };
-  img.onerror=()=>{ $("#poster").style.backgroundImage=`url(${thumb(c.yt,"hqdefault")})`;
-                    $("#spill").style.backgroundImage=`url(${thumb(c.yt,"hqdefault")})`; };
-  img.src=thumb(c.yt);
+  // poster + spill from a clean trailer FRAME-grab (hq2.jpg = a still from the video
+  // itself) — avoids the uploader's "OFFICIAL TRAILER" custom-thumbnail text.
+  // Production uses TMDB poster_url/backdrop_url (clean, high-res) instead.
+  const src=thumb(c.yt,"hq2"), fb=thumb(c.yt,"hqdefault");
+  const probe=new Image();
+  probe.onload=()=>{ $("#poster").style.backgroundImage=`url(${src})`;
+                     $("#spill").style.backgroundImage=`url(${src})`; };
+  probe.onerror=()=>{ $("#poster").style.backgroundImage=`url(${fb})`;
+                      $("#spill").style.backgroundImage=`url(${fb})`; };
+  probe.src=src;
 }
 
 /* ---- load / play with debounce + skip safety --------------------------- */
@@ -442,7 +443,7 @@ function buildBoard(){
   THEMES.forEach((th,i)=>{
     const row=document.createElement("div");
     row.className="prog-row"+(i===boardSel?" cur":"");
-    row.innerHTML=`<div class="prog-still" style="background-image:url(${thumb(th.titles[0].yt,"hqdefault")})"></div>
+    row.innerHTML=`<div class="prog-still" style="background-image:url(${thumb(th.titles[0].yt,"hq2")})"></div>
       <div class="prog-meta"><div class="prog-name">${th.label}</div><div class="prog-tag">${th.kind}</div></div>
       <div class="prog-count">${th.titles.length}</div>`;
     row.onclick=()=>{ boardSel=i; startFrom(i); };
