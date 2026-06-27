@@ -4,6 +4,8 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>discovarr</title>
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+<meta name="theme-color" content="#0B0A09" />
 
 <!-- Cinema-printing type: billing-block (Saira Extra Condensed) + marquee (Saira Condensed) + body (Mulish). -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -452,7 +454,7 @@ function renderControls(){
 }
 function setIcon(k,svg){ const b=btn[k]; if(b) b.querySelector("svg").innerHTML=ICONS[svg]; }
 function updateControls(t){
-  const k=`${t.type}:${t.tmdb_id}`;
+  const k=key(t);
   btn.watchlist.classList.toggle("on", watchlistedSet.has(k));
   btn.request.classList.toggle("on", requestedSet.has(k));
   setIcon("pause","pause");
@@ -534,7 +536,9 @@ function onState(e){
 function onErr(){ skipDud("unavailable"); }
 function skipDud(why){
   skips++;
-  if(skips>8){ toast("Nothing playable here right now — ↓ for the next theme."); skips=0; return; }
+  if(skips>8){   // whole theme is duds — clear the spinner and move on, don't hang on a still
+    toast("Nothing playable here — moving on."); skips=0;
+    $("#screen").classList.remove("buffering"); goTheme(1); return; }
   toast(`Trailer ${why} — skipping`);
   const th=themes[ti];
   if(th && th.titles.length) th.titles.splice(xi,1);   // age-gated etc. — drop it too
@@ -582,7 +586,7 @@ async function loadMore(){
 const personTitles = (id,role) => fetchJSON(`/api/person/${id}/titles?role=${role}`).then(d=>d.titles);
 function doAction(k){
   if(!curTile) return;
-  const t=curTile, kk=`${t.type}:${t.tmdb_id}`;
+  const t=curTile, kk=key(t);
   switch(k){
     case "pause":     togglePause(); break;
     case "watchlist": doWatchlist(t,kk); break;
@@ -622,12 +626,12 @@ async function doHide(t,k){
   removeKeyEverywhere(k);
   toast("<b>Not for me</b> — next up");
   dir=1; land();
-  try{ await postJSON("/api/exclude",{tmdb_id:t.tmdb_id,type:t.type}); }catch(e){}
+  try{ await postJSON("/api/exclude",{tmdb_id:t.tmdb_id,type:t.type}); }catch(e){ console.warn("exclude failed — will reappear next session", e); }
 }
 async function doDitch(){
   const th=themes[ti];
   toast(`Ditched <b>${th.label}</b> — next theme`);
-  if(th.id.startsWith("gen:")){ try{ await postJSON("/api/exclude-theme",{theme_id:th.id}); }catch(e){} }
+  if(th.id.startsWith("gen:")){ try{ await postJSON("/api/exclude-theme",{theme_id:th.id}); }catch(e){ console.warn("exclude-theme failed — will reappear next session", e); } }
   themes.splice(ti,1);
   if(!themes.length){ showLibraryError(); return; }
   if(ti>=themes.length) ti=0;
@@ -685,7 +689,7 @@ function openPeoplePicker(people, kind, onPick){
   renderPicker(); openOverlay();
 }
 function openSeasonPicker(t,k){
-  const items=[{label:"Season 1", seasons:[1]}, {label:"All seasons", seasons:null}];
+  const items=[{label:"All seasons", seasons:null}];   // real seasons come from t.seasons below
   for(const s of (t.seasons||[])) items.push({label:`Season ${s.season_number}`,
     sub:`${s.episode_count||"?"} eps`, seasons:[s.season_number]});
   picker={layout:"list", items, sel:0, head:`Request <b>${t.title}</b>`, onPick:item=>sendRequest(t,k,item.seasons)};

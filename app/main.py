@@ -515,6 +515,8 @@ async def youtube_oembed_ok(key: str) -> bool:
         if r.status_code in (401, 404):
             log.info("YouTube oEmbed %s -> %s (dropping trailer on load)", key, r.status_code)
             return False
+        if r.status_code >= 400:  # 429 burst / 5xx — fail OPEN, but leave a trail
+            log.warning("YouTube oEmbed %s -> %s — failing open (keeping title)", key, r.status_code)
         return True
     except Exception as e:  # noqa: BLE001
         log.warning("YouTube oEmbed probe %s errored (%s) — keeping title", key, e)
@@ -522,15 +524,23 @@ async def youtube_oembed_ok(key: str) -> bool:
 
 
 async def build_tile(tmdb_id: int, mtype: MediaType, fresh: bool = False) -> dict:
-    ckey = f"title:{mtype}:{tmdb_id}"
+    # `v2` namespaces the Step-2 tile shape (credits/seasons/trailer_ok/genres). Bumping
+    # it sidesteps serving Step-1-cached tiles in the old shape — no deploy-time flush.
+    ckey = f"title:v2:{mtype}:{tmdb_id}"
     if not fresh:
         cached = cache_get(ckey)
         if cached:
             return cached
     base = await tmdb_title(tmdb_id, mtype)
-    ratings = await mdblist_ratings(base.pop("imdb_id", None), tmdb_id, mtype)
     trailer_key = base["trailer_youtube_key"]
-    trailer_ok = await youtube_oembed_ok(trailer_key) if trailer_key else False
+    imdb_id = base.pop("imdb_id", None)
+    # ratings (MDBList) and the oEmbed embeddable-probe are independent of each other
+    # and of nothing else here — run them concurrently to halve cold-tile latency.
+    if trailer_key:
+        ratings, trailer_ok = await asyncio.gather(
+            mdblist_ratings(imdb_id, tmdb_id, mtype), youtube_oembed_ok(trailer_key))
+    else:
+        ratings, trailer_ok = await mdblist_ratings(imdb_id, tmdb_id, mtype), False
     tile = {
         "tmdb_id": base["tmdb_id"], "type": base["type"], "title": base["title"],
         "year": base["year"], "overview": base["overview"],
@@ -593,6 +603,17 @@ def _filter(ids: list[dict], block: set[tuple[int, str]]) -> list[dict]:
     return [x for x in ids if (x["tmdb_id"], x["type"]) not in block]
 
 
+async def current_block() -> set[tuple[int, str]]:
+    """Titles to hide from any feed: locally-excluded ∪ Trakt-watched. A Trakt
+    hiccup must NEVER 500 a feed — degrade to just the local excludes. Shared by
+    every feed endpoint so the guard can't be forgotten on one of them."""
+    try:
+        return excluded_set() | await trakt_watched_ids()
+    except Exception as e:  # noqa: BLE001 — a Trakt hiccup shouldn't sink the feed
+        log.warning("watched-set fetch failed: %s", e)
+        return excluded_set()
+
+
 async def build_generated_reel(limit: int, cap: int, block: set[tuple[int, str]],
                                ditched: set[str], seen_ids: set[str] = frozenset()) -> list[dict]:
     """The ↑/↓ generated reel: random themes resolved via discover, with empty/ditched/
@@ -648,7 +669,11 @@ async def because_you_watched(cap: int) -> list[dict]:
                 log.warning("because-you-watched seed failed: %s", s)
             elif s:
                 rows.append(s)
-    cache_set("reel:becausewatched", rows, TTL_THEME)
+    # Only cache a NON-empty result — caching [] (cold/unauthed Trakt, or all seeds
+    # failed) would suppress the personalised rows for the full TTL even after Trakt
+    # recovers. Empty is cheap to recompute, so just don't persist it.
+    if rows:
+        cache_set("reel:becausewatched", rows, TTL_THEME)
     return rows
 
 
@@ -728,10 +753,7 @@ async def unexclude_theme(theme_id: str = ""):
 @app.get("/api/themes")
 async def get_themes(limit: int = 10):
     cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
-    try:
-        block = excluded_set() | await trakt_watched_ids()
-    except Exception as e:  # noqa: BLE001 — a Trakt hiccup shouldn't 500 the whole reel
-        log.warning("watched-set fetch failed: %s", e); block = excluded_set()
+    block = await current_block()
     ditched = excluded_themes_set()
 
     # Nav-bar standard themes + the generated reel, all resolved CONCURRENTLY.
@@ -775,7 +797,7 @@ async def reel_more(limit: int = 5, seen: str = ""):
     past the last one (DECISIONS item 7). `seen` = comma-separated theme ids already on
     screen, excluded so the append doesn't repeat; ditched combos excluded too."""
     cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
-    block = excluded_set() | await trakt_watched_ids()
+    block = await current_block()
     ditched = excluded_themes_set()
     seen_ids = {s for s in seen.split(",") if s}
     return {"reel": await build_generated_reel(limit, cap, block, ditched, seen_ids)}
@@ -823,7 +845,7 @@ async def recommendations(tmdb_id: int, type: MediaType = "movie"):
     """'More like this' spawn seed — recommendations for a title, post-filtered by
     watched ∪ excluded (the frontend additionally de-dupes already-shown)."""
     cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
-    block = excluded_set() | await trakt_watched_ids()
+    block = await current_block()
     return {"titles": _filter(await tmdb_recommendations(tmdb_id, type, cap), block)}
 
 
@@ -832,7 +854,7 @@ async def person_titles(person_id: int, role: Literal["cast", "crew"] = "cast"):
     """'More from director' (role=crew→Director) / 'More with cast member' (role=cast)
     spawn seed. person_id comes from the credits already on the tile."""
     cap = CONFIG.get("themes", {}).get("titles_per_theme", 30)
-    block = excluded_set() | await trakt_watched_ids()
+    block = await current_block()
     return {"titles": _filter(await tmdb_person_titles(person_id, role, cap), block)}
 
 
