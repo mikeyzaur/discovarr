@@ -192,8 +192,29 @@ def _pick_trailer(videos: dict) -> Optional[str]:
     return yt[0]["key"] if yt else None
 
 
+def _extract_credits(detail: dict, mtype: MediaType) -> dict:
+    """Director(s) + top-billed cast for the tooltip / cast picker / spawns, pulled
+    from append_to_response=credits — no extra call (DECISIONS build-item 10). The
+    spawn axis is TMDB discover with_crew / with_cast, so each entry carries a
+    person `id`. 'Director' = crew Director for movies, the show's creators
+    (`created_by`) for TV — the meaningful 'more from' seed for each medium."""
+    cred = detail.get("credits") or {}
+    if mtype == "movie":
+        directors = [{"id": p["id"], "name": p.get("name", "?")}
+                     for p in (cred.get("crew") or [])
+                     if p.get("job") == "Director" and p.get("id")]
+    else:
+        directors = [{"id": p["id"], "name": p.get("name", "?")}
+                     for p in (detail.get("created_by") or []) if p.get("id")]
+    cast = [{"id": p["id"], "name": p.get("name", "?"),
+             "profile_url": f"{IMG}/w185{p['profile_path']}" if p.get("profile_path") else None}
+            for p in (cred.get("cast") or [])[:10] if p.get("id")]
+    return {"directors": directors, "cast": cast}
+
+
 async def tmdb_title(tmdb_id: int, mtype: MediaType) -> dict:
-    sub = "videos,external_ids,release_dates" if mtype == "movie" else "videos,external_ids,content_ratings"
+    sub = ("videos,external_ids,credits,release_dates" if mtype == "movie"
+           else "videos,external_ids,credits,content_ratings")
     r = await client.get(f"{TMDB}/{mtype}/{tmdb_id}", headers=_tmdb_headers(),
                           params={"append_to_response": sub})
     if r.status_code != 200:
@@ -204,6 +225,17 @@ async def tmdb_title(tmdb_id: int, mtype: MediaType) -> dict:
     date = d.get("release_date") or d.get("first_air_date") or ""
     poster = d.get("poster_path")
     backdrop = d.get("backdrop_path")
+    # Runtime (movies) vs season/episode counts (TV) for the metadata line, plus a
+    # per-season list (number + episode_count, specials dropped) for the TV request
+    # picker — DECISIONS build-items 2 + 11. All top-level on the detail response.
+    if mtype == "movie":
+        runtime, n_seasons, n_episodes, seasons = d.get("runtime"), None, None, None
+    else:
+        runtime = None
+        n_seasons = d.get("number_of_seasons")
+        n_episodes = d.get("number_of_episodes")
+        seasons = [{"season_number": s.get("season_number"), "episode_count": s.get("episode_count")}
+                   for s in (d.get("seasons") or []) if (s.get("season_number") or 0) >= 1]
     return {
         "tmdb_id": tmdb_id,
         "type": mtype,
@@ -214,6 +246,11 @@ async def tmdb_title(tmdb_id: int, mtype: MediaType) -> dict:
         "backdrop_url": f"{IMG}/w1280{backdrop}" if backdrop else None,
         "trailer_youtube_key": _pick_trailer(d.get("videos")),
         "imdb_id": (d.get("external_ids") or {}).get("imdb_id"),
+        "runtime": runtime,
+        "number_of_seasons": n_seasons,
+        "number_of_episodes": n_episodes,
+        "seasons": seasons,
+        "credits": _extract_credits(d, mtype),
     }
 
 
@@ -384,6 +421,27 @@ async def trakt_watched_ids() -> set[tuple[int, str]]:
 # ---------------------------------------------------------------------------
 # Tile contract — merge TMDB + MDBList into the ONE shape the frontend knows.
 # ---------------------------------------------------------------------------
+YT_OEMBED = "https://www.youtube.com/oembed"
+
+
+async def youtube_oembed_ok(key: str) -> bool:
+    """oEmbed probe (DECISIONS build-item 8): 200 = embeddable trailer; non-200 =
+    removed / region-locked / embedding-disabled → the frontend drops the title on
+    load so we never land on a dead black box. Does NOT catch age-gated trailers
+    (that's the residual play-time skip safety net). Cached as part of the tile
+    (TTL_TITLE) so this only fires on a cold tile. Fails OPEN — a probe error keeps
+    the title rather than wrongly hiding good content; the skip is the backstop."""
+    try:
+        r = await client.get(YT_OEMBED, params={
+            "url": f"https://www.youtube.com/watch?v={key}", "format": "json"})
+        if r.status_code != 200:
+            log.info("YouTube oEmbed %s -> %s (dropping trailer on load)", key, r.status_code)
+        return r.status_code == 200
+    except Exception as e:  # noqa: BLE001
+        log.warning("YouTube oEmbed probe %s errored (%s) — keeping title", key, e)
+        return True
+
+
 async def build_tile(tmdb_id: int, mtype: MediaType, fresh: bool = False) -> dict:
     ckey = f"title:{mtype}:{tmdb_id}"
     if not fresh:
@@ -392,11 +450,16 @@ async def build_tile(tmdb_id: int, mtype: MediaType, fresh: bool = False) -> dic
             return cached
     base = await tmdb_title(tmdb_id, mtype)
     ratings = await mdblist_ratings(base.pop("imdb_id", None), tmdb_id, mtype)
+    trailer_key = base["trailer_youtube_key"]
+    trailer_ok = await youtube_oembed_ok(trailer_key) if trailer_key else False
     tile = {
         "tmdb_id": base["tmdb_id"], "type": base["type"], "title": base["title"],
         "year": base["year"], "overview": base["overview"],
         "poster_url": base["poster_url"], "backdrop_url": base["backdrop_url"],
-        "trailer_youtube_key": base["trailer_youtube_key"],
+        "trailer_youtube_key": trailer_key, "trailer_ok": trailer_ok,
+        "runtime": base["runtime"], "number_of_seasons": base["number_of_seasons"],
+        "number_of_episodes": base["number_of_episodes"], "seasons": base["seasons"],
+        "credits": base["credits"],
         "ratings": ratings, "awards": None, "requested": False,
     }
     cache_set(ckey, tile, TTL_TITLE)
@@ -475,6 +538,16 @@ async def health():
         except Exception as e:  # noqa: BLE001
             out[name] = f"err: {e}"
     return out
+
+
+@app.get("/api/config")
+async def get_config():
+    """Display config the frontend needs at boot (DECISIONS build-item 1): which
+    ratings chips to render in what order, and whether Trakt is connected (the
+    board uses this to show/hide the 'Connect Trakt for your watchlist &
+    personalised rows' hint and to degrade gracefully without it)."""
+    chips = CONFIG.get("ratings", {}).get("chips", ["imdb", "rt_critic", "rt_audience"])
+    return {"ratings_chips": chips, "trakt_authed": _trakt_tokens() is not None}
 
 
 @app.get("/api/title/{tmdb_id}")
