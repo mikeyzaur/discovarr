@@ -2,28 +2,763 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>discovarr</title>
+
+<!-- Cinema-printing type: billing-block (Saira Extra Condensed) + marquee (Saira Condensed) + body (Mulish). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600&family=Saira+Condensed:wght@500;700&family=Saira+Extra+Condensed:wght@700;800&display=swap" rel="stylesheet">
+
 <style>
-  html,body{margin:0;height:100%;background:#0b0d10;color:#e8eef3;
-    font:15px/1.5 system-ui,sans-serif;display:grid;place-items:center;text-align:center}
-  .card{max-width:540px;padding:28px}
-  h1{font-size:22px;margin:0 0 6px}
-  code{background:#14181d;padding:2px 6px;border-radius:6px;font-size:13px}
-  a{color:#5db0ff}
-  .muted{color:#8a97a4}
+/* ============================================================================
+   discovarr — THEATRE FRONTEND (Step 2). Single-file HTML/CSS/JS, served
+   same-origin by the FastAPI proxy; binds to /api/*. Visual direction signed
+   off in design-proto/ — "the room lit by the screen": the trailer is the hero,
+   the chrome is the dark of the cinema lit by a blurred spill of the film.
+   ========================================================================= */
+:root{
+  --auditorium:#0B0A09;   /* warm near-black — the room (not pure #000)        */
+  --house:#15120F;        /* letterbox bar / raised surfaces                   */
+  --ink:#F2EBDF;          /* warm screen-white                                 */
+  --ink-dim:#968C7F;      /* house-lights-down grey                            */
+  --marquee:#E9B44C;      /* incandescent marquee-bulb amber — used sparingly  */
+  --hair:rgba(242,235,223,.14);
+  --billing: "Saira Extra Condensed", "Arial Narrow", sans-serif;
+  --display: "Saira Condensed", "Arial Narrow", sans-serif;
+  --body: "Mulish", system-ui, sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;height:100%;background:var(--auditorium);color:var(--ink);
+  font-family:var(--body);overflow:hidden;}
+button{font-family:inherit;color:inherit;}
+
+/* ---- the room ----------------------------------------------------------- */
+#room{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+
+/* SIGNATURE: light-spill. A heavily blurred, oversized copy of the current
+   backdrop bleeds out around the screen — the projector lighting the walls. */
+#spill{position:absolute;inset:-12%;background-size:cover;background-position:center;
+  filter:blur(90px) saturate(1.5) brightness(.62);transform:scale(1.18);
+  opacity:0;transition:opacity 1.1s ease, background-image 0s;z-index:0;}
+#room.lit #spill{opacity:.9;}
+#vignette{position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(120% 90% at 50% 42%, transparent 38%, rgba(0,0,0,.55) 100%);}
+
+/* ---- the screen (letterboxed 16:9) -------------------------------------- */
+#screen{position:relative;z-index:2;width:min(96vw, 168vh);aspect-ratio:16/9;
+  background:#000;border-radius:6px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(0,0,0,.6), 0 40px 120px rgba(0,0,0,.7);}
+#player{position:absolute;inset:0;width:100%;height:100%;border:0;}
+/* Transparent cover swallows hover/taps so YouTube chrome never reveals. */
+#cover{position:absolute;inset:0;z-index:3;cursor:pointer;}
+#poster{position:absolute;inset:0;z-index:2;background:#000 center/cover no-repeat;
+  transition:opacity .5s ease;}
+#screen.playing #poster{opacity:0;}
+#spinner{position:absolute;left:50%;top:50%;width:34px;height:34px;z-index:2;
+  margin:-17px;border:3px solid rgba(242,235,223,.25);border-top-color:var(--ink);
+  border-radius:50%;animation:spin 1s linear infinite;opacity:0;transition:opacity .2s;}
+#screen.buffering #spinner{opacity:.8;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ---- billing block (the lower letterbox bar = part of the film frame) --- */
+#billing{position:absolute;left:0;right:0;bottom:0;z-index:4;
+  padding:64px clamp(20px,5vw,72px) clamp(18px,3.4vh,34px);
+  background:linear-gradient(transparent, rgba(8,7,6,.5) 38%, rgba(8,7,6,.94));
+  opacity:1;transform:none;pointer-events:auto;}   /* persistent — small enough to stay */
+
+.title-line{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;}
+.title{font-family:var(--billing);font-weight:800;text-transform:uppercase;
+  letter-spacing:.01em;line-height:.92;font-size:clamp(30px,5.6vw,76px);margin:0;}
+.year{font-family:var(--display);font-weight:500;color:var(--ink-dim);
+  font-size:clamp(16px,1.9vw,26px);letter-spacing:.08em;}
+.kind{font-family:var(--display);font-weight:700;text-transform:uppercase;
+  letter-spacing:.22em;font-size:12px;color:var(--marquee);margin-bottom:6px;}
+.kind .dot{color:var(--ink-dim);margin:0 8px;}
+.overview{font-size:clamp(13px,1.15vw,15.5px);line-height:1.55;color:var(--ink);
+  opacity:.84;max-width:66ch;margin:10px 0 0;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
+
+/* ratings — disciplined, monochrome, tabular. Colour belongs to the film. */
+.ratings{display:flex;gap:20px;margin-top:14px;font-variant-numeric:tabular-nums;min-height:26px;}
+.chip{display:flex;align-items:center;gap:7px;}
+.chip .src{font-family:var(--display);font-weight:700;text-transform:uppercase;
+  letter-spacing:.14em;font-size:10px;color:var(--ink-dim);}
+.chip .val{font-family:var(--billing);font-weight:700;font-size:22px;color:var(--ink);}
+/* light quality tint — pale so it signals good/ok/bad without fighting the film */
+.chip .val.v-good{color:#9FD8A4;} .chip .val.v-ok{color:#ECC66B;} .chip .val.v-bad{color:#E59B86;}
+.imdb-badge{background:#F5C518;color:#0B0A09;font-family:var(--billing);font-weight:800;
+  font-size:13px;letter-spacing:.02em;padding:2px 6px;border-radius:4px;line-height:1;}
+.rt-ico{width:23px;height:23px;display:block;}
+.rt-ico.pop{width:26px;height:26px;}
+
+/* ---- icon control row --------------------------------------------------- */
+.controls{display:flex;align-items:center;gap:6px;margin-top:18px;}
+.sep{width:1px;height:26px;background:var(--hair);margin:0 8px;}
+.ico{display:grid;place-items:center;width:44px;height:44px;border-radius:10px;
+  background:rgba(242,235,223,.05);border:1px solid transparent;cursor:pointer;
+  transition:background .15s, border-color .15s, transform .1s;}
+.ico:hover,.ico:focus-visible{background:rgba(242,235,223,.1);border-color:var(--hair);outline:none;}
+.ico:active{transform:translateY(1px);}
+.ico.on{color:var(--marquee);border-color:rgba(233,180,76,.4);background:rgba(233,180,76,.1);}
+.ico.disabled{opacity:.28;pointer-events:none;}
+.ico svg{width:21px;height:21px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round;}
+.autoadv{margin-left:auto;display:flex;align-items:center;gap:9px;
+  font-family:var(--display);font-weight:500;letter-spacing:.12em;text-transform:uppercase;
+  font-size:11px;color:var(--ink-dim);cursor:pointer;user-select:none;}
+.switch{width:38px;height:21px;border-radius:999px;background:rgba(242,235,223,.14);
+  position:relative;transition:background .2s;}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:17px;height:17px;
+  border-radius:50%;background:var(--ink-dim);transition:transform .2s, background .2s;}
+.autoadv.on .switch{background:rgba(233,180,76,.35);}
+.autoadv.on .switch::after{transform:translateX(17px);background:var(--marquee);}
+
+/* ---- reel-position marker (you-are-here in the programme) ---------------- */
+#posmark{position:absolute;top:clamp(16px,3vh,30px);left:clamp(20px,5vw,72px);z-index:4;}
+.dots{display:flex;gap:5px;flex-wrap:wrap;max-width:60vw;}
+.dots i{width:5px;height:5px;border-radius:50%;background:rgba(242,235,223,.22);}
+.dots i.cur{background:var(--marquee);width:16px;border-radius:3px;}
+
+/* ---- Programme board (start screen + re-summonable jump menu) ------------ */
+#board{position:fixed;inset:0;z-index:9;background:
+  radial-gradient(140% 100% at 50% 0%, #1b1712 0%, var(--auditorium) 60%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:5vh 6vw;opacity:1;transition:opacity .7s ease;}
+#board.hide{opacity:0;pointer-events:none;}
+.board-eyebrow{font-family:var(--display);font-weight:500;letter-spacing:.5em;
+  text-transform:uppercase;font-size:12px;color:var(--marquee);margin-bottom:6px;}
+.board-title{font-family:var(--billing);font-weight:800;text-transform:uppercase;
+  font-size:clamp(40px,7vw,92px);line-height:.9;margin:0 0 4px;letter-spacing:.01em;}
+.board-sub{color:var(--ink-dim);font-size:14px;margin:0 0 14px;text-align:center;max-width:46ch;}
+.board-sub b{color:var(--ink);font-weight:600;}
+#connectHint{display:none;margin:0 0 24px;font-size:12.5px;color:var(--marquee);
+  border:1px solid rgba(233,180,76,.3);border-radius:999px;padding:7px 16px;letter-spacing:.02em;}
+#connectHint.show{display:block;}
+.programme{width:min(720px,92vw);max-height:54vh;overflow-y:auto;
+  display:flex;flex-direction:column;gap:2px;scrollbar-width:thin;}
+.prog-row{display:flex;align-items:center;gap:18px;padding:12px 16px;border-radius:12px;
+  cursor:pointer;border:1px solid transparent;transition:background .15s, border-color .15s;}
+.prog-row:hover{background:rgba(242,235,223,.04);}
+.prog-row.cur{background:rgba(233,180,76,.08);border-color:rgba(233,180,76,.3);}
+.prog-still{width:96px;height:54px;border-radius:6px;background:#15120F center/cover no-repeat;
+  flex:0 0 auto;box-shadow:0 4px 18px rgba(0,0,0,.5);}
+.prog-meta{flex:1;min-width:0;}
+.prog-name{font-family:var(--display);font-weight:700;text-transform:uppercase;
+  letter-spacing:.06em;font-size:clamp(18px,2.4vw,26px);line-height:1;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.prog-row.cur .prog-name{color:var(--marquee);}
+.prog-tag{font-family:var(--display);letter-spacing:.18em;text-transform:uppercase;
+  font-size:10px;color:var(--ink-dim);margin-top:5px;}
+.prog-count{font-family:var(--billing);font-weight:700;font-size:22px;color:var(--ink-dim);}
+.board-hint{margin-top:24px;color:var(--ink-dim);font-size:12px;letter-spacing:.04em;text-align:center;}
+.board-hint kbd{font-family:var(--display);background:rgba(242,235,223,.08);
+  border:1px solid var(--hair);border-radius:5px;padding:2px 7px;font-size:11px;color:var(--ink);}
+
+/* board degraded state (can't reach the library) */
+#libError{display:none;flex-direction:column;align-items:center;gap:18px;}
+#board.error .programme,#board.error .board-hint,#board.error .board-sub,#board.error #connectHint{display:none;}
+#board.error #libError{display:flex;}
+.retry-btn{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.16em;
+  font-size:13px;color:var(--auditorium);background:var(--marquee);border:0;border-radius:10px;
+  padding:12px 28px;cursor:pointer;}
+
+/* ---- picker overlay (cast / co-directors / TV seasons) ------------------ */
+#overlay{position:fixed;inset:0;z-index:11;display:none;align-items:center;justify-content:center;
+  background:rgba(6,5,4,.72);backdrop-filter:blur(3px);padding:5vh 5vw;}
+#overlay.show{display:flex;}
+.picker{background:rgba(20,17,15,.96);border:1px solid var(--hair);border-radius:18px;
+  padding:26px clamp(20px,4vw,40px);box-shadow:0 30px 90px rgba(0,0,0,.7);max-width:94vw;}
+.picker-head{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.16em;
+  font-size:13px;color:var(--ink-dim);margin-bottom:20px;text-align:center;}
+.picker-head b{color:var(--ink);}
+/* people = horizontal strip of circular headshots */
+.people{display:flex;gap:18px;overflow-x:auto;padding:6px 2px 14px;max-width:min(86vw,860px);scrollbar-width:thin;}
+.person{flex:0 0 auto;width:96px;text-align:center;cursor:pointer;}
+.person .face{width:84px;height:84px;border-radius:50%;margin:0 auto 8px;background:#2a241d center/cover no-repeat;
+  display:grid;place-items:center;border:2px solid transparent;transition:border-color .15s, transform .1s;
+  font-family:var(--billing);font-weight:800;font-size:26px;color:var(--ink-dim);}
+.person.cur .face{border-color:var(--marquee);transform:translateY(-2px);}
+.person .nm{font-size:11.5px;line-height:1.25;color:var(--ink);opacity:.86;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.person.cur .nm{color:var(--marquee);opacity:1;}
+/* seasons = vertical list */
+.seasons{display:flex;flex-direction:column;gap:4px;min-width:min(86vw,360px);max-height:60vh;overflow-y:auto;}
+.season{display:flex;align-items:baseline;justify-content:space-between;gap:18px;cursor:pointer;
+  padding:11px 16px;border-radius:10px;border:1px solid transparent;}
+.season.cur{background:rgba(233,180,76,.1);border-color:rgba(233,180,76,.35);}
+.season .sn{font-family:var(--display);font-weight:700;text-transform:uppercase;letter-spacing:.08em;font-size:16px;}
+.season.cur .sn{color:var(--marquee);}
+.season .se{font-size:11px;color:var(--ink-dim);font-variant-numeric:tabular-nums;}
+.picker-foot{margin-top:16px;text-align:center;color:var(--ink-dim);font-size:11px;letter-spacing:.04em;}
+.picker-foot kbd{font-family:var(--display);background:rgba(242,235,223,.08);border:1px solid var(--hair);
+  border-radius:5px;padding:2px 6px;font-size:10px;color:var(--ink);}
+
+/* ---- toast -------------------------------------------------------------- */
+#toast{position:fixed;left:50%;bottom:clamp(24px,8vh,90px);transform:translateX(-50%) translateY(20px);
+  z-index:12;background:rgba(20,17,15,.96);border:1px solid var(--hair);border-radius:999px;
+  padding:11px 22px;font-size:13.5px;letter-spacing:.02em;opacity:0;
+  transition:opacity .25s, transform .25s;box-shadow:0 12px 40px rgba(0,0,0,.6);white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast b{color:var(--marquee);font-weight:600;}
+
+@media (prefers-reduced-motion: reduce){*{transition:none !important;animation:none !important;}}
+@media (max-width:640px){
+  .controls{flex-wrap:wrap;}
+  .autoadv{margin-left:0;width:100%;justify-content:flex-end;margin-top:6px;}
+  .prog-still{width:64px;height:36px;}
+}
 </style>
 </head>
 <body>
-  <div class="card">
-    <h1>discovarr · backend up</h1>
-    <p class="muted">Step 1 scaffold. The theatre frontend lands in Step 2 and replaces this file.</p>
-    <p>Verify on the host:</p>
-    <p><code>curl localhost:8001/api/health</code><br>
-       <code>curl "localhost:8001/api/title/1396?type=tv"</code><br>
-       <code>curl localhost:8001/api/themes</code></p>
-    <p class="muted">connection-refused = the app failed to <i>start</i> (import/syntax) —
-       check <code>docker compose logs discovarr-api</code>. 500 = a handler raised.</p>
+<div id="room">
+  <div id="spill"></div>
+  <div id="vignette"></div>
+
+  <div id="screen">
+    <div id="poster"></div>
+    <div id="player"></div>
+    <div id="spinner"></div>
+    <div id="cover"></div>
+
+    <div id="posmark"><div class="dots" id="pmDots"></div></div>
+
+    <div id="billing">
+      <div class="kind" id="bKind"></div>
+      <div class="title-line">
+        <h1 class="title" id="bTitle">—</h1>
+        <span class="year" id="bYear"></span>
+      </div>
+      <div class="ratings" id="bRatings"></div>
+      <p class="overview" id="bOverview"></p>
+      <div class="controls" id="bControls"></div>
+    </div>
   </div>
+</div>
+
+<!-- Programme board: the start gesture (unlocks sound) AND the jump menu. -->
+<div id="board">
+  <div class="board-eyebrow">discovarr</div>
+  <h2 class="board-title">Tonight's Programme</h2>
+  <p class="board-sub">Pick where to start — this single press unlocks <b>sound-on autoplay</b>
+    for the whole session, every device. Or just hit <b>OK</b> to begin from the top.</p>
+  <div id="connectHint">Connect Trakt for your watchlist &amp; personalised rows</div>
+  <div class="programme" id="programme"></div>
+  <div class="board-hint">
+    <kbd>↑</kbd><kbd>↓</kbd> choose &nbsp;·&nbsp; <kbd>↵ Enter</kbd> start &nbsp;·&nbsp;
+    in the reel: <kbd>←</kbd><kbd>→</kbd> titles, <kbd>↑</kbd><kbd>↓</kbd> themes,
+    <kbd>Space</kbd> pause, <kbd>F</kbd> fullscreen, <kbd>M</kbd> this menu
+  </div>
+  <div id="libError">
+    <div class="board-sub" style="color:var(--ink);font-size:18px">Can't reach your library right now.</div>
+    <button class="retry-btn" id="retryBtn">Retry</button>
+  </div>
+</div>
+
+<div id="overlay"><div class="picker" id="picker"></div></div>
+<div id="toast"></div>
+
+<script>
+/* ===========================================================================
+   HELPERS
+   =========================================================================== */
+const $ = s => document.querySelector(s);
+const room = $("#room");
+const key = r => `${r.type}:${r.tmdb_id}`;
+const CHIP_SRC = {imdb:"IMDb", rt_critic:"RT", rt_audience:"POPCORN", metacritic:"MC", trakt:"TRAKT", letterboxd:"LB"};
+
+async function fetchJSON(u){ const r = await fetch(u); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function postJSON(u,b){ const r = await fetch(u,{method:"POST",headers:{"content-type":"application/json"},
+  body:JSON.stringify(b)}); if(!r.ok) throw new Error(r.status); return r.json(); }
+
+// movie runtime "2h 46m"; TV season count (or episode count if a single season).
+function metaStr(t){
+  if(t.type==="tv"){
+    const s=t.number_of_seasons;
+    if(s>1) return `${s} seasons`;
+    const e=t.number_of_episodes;
+    return e ? `${e} episodes` : (s ? `${s} season` : "");
+  }
+  if(t.runtime){ const h=Math.floor(t.runtime/60), m=t.runtime%60; return h?`${h}h ${m}m`:`${m}m`; }
+  return "";
+}
+// quality tint thresholds: IMDb /10, RT %.
+function rclass(k,v){ const n=parseFloat(v); const th = k==="imdb"?[7.5,6]:[75,60];
+  return n>=th[0]?"v-good":n>=th[1]?"v-ok":"v-bad"; }
+
+/* brand-ish rating glyphs (filled SVG): RT tomato (critic) + popcorn (audience). IMDb = badge. */
+const TOMATO='<circle cx="12" cy="14" r="7.5" fill="#FA320A"/><path d="M12.5 7.1c-1.1-2.6.7-4 2.9-4.2-.6 1.9.1 3.6-2.9 4.2z" fill="#57A639"/><path d="M11.7 7c-.2-1.6-1-2.4-2.2-2.8.4 1.3.5 2.2 2.2 2.8z" fill="#57A639"/>';
+const POPCORN='<path d="M6.2 9h11.6l-1.2 11.4a1 1 0 0 1-1 .9H8.4a1 1 0 0 1-1-.9z" fill="#EDE7DC"/><path d="M9 9.2l.5 11.6M12 9.2v11.6M15 9.2l-.5 11.6" stroke="#C9402F" stroke-width="1.2"/><circle cx="8.6" cy="6.7" r="2.5" fill="#F2C94C"/><circle cx="12" cy="5.3" r="2.7" fill="#F4D77E"/><circle cx="15.4" cy="6.7" r="2.5" fill="#F2C94C"/>';
+
+/* ---- action icons (inline SVG, stroke) ---------------------------------- */
+const ICONS = {
+  pause:'<rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/>',
+  play:'<path d="M7 4l13 8-13 8z"/>',
+  watchlist:'<path d="M6 4h12v16l-6-4-6 4z"/><path d="M12 8v5M9.5 10.5h5"/>',
+  request:'<path d="M12 4v10m0 0l-4-4m4 4l4-4"/><path d="M5 19h14"/>',
+  watched:'<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+  like:'<path d="M12 3l2 5 5 .4-3.8 3.3 1.2 5L12 19l-4.6 2.7 1.2-5L4.8 8.4 9.8 8z"/>',
+  director:'<path d="M3 8h18v11H3z"/><path d="M3 8l3-4 3 4M9 8l3-4 3 4M15 8l3-4 3 4"/>',
+  cast:'<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 5a3 3 0 0 1 0 6M18 20c0-2.4-1-4.5-2.5-5.7"/>',
+  hide:'<path d="M3 3l18 18"/><path d="M10.6 5.2A10 10 0 0 1 12 5c7 0 11 7 11 7a17 17 0 0 1-3.3 4M6.6 6.6A17 17 0 0 0 1 12s4 7 11 7a10 10 0 0 0 4-.8"/>',
+  ditch:'<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+};
+const ACTIONS = [
+  {key:"pause",     group:0, label:"Pause"},
+  {key:"watchlist", group:1, label:"Watchlist → Trakt"},
+  {key:"request",   group:1, label:"Request → Seerr"},
+  {key:"watched",   group:1, label:"Mark watched → Trakt"},
+  {key:"like",      group:2, label:"More like this"},
+  {key:"director",  group:2, label:"More from director"},
+  {key:"cast",      group:2, label:"More with cast"},
+  {key:"hide",      group:3, label:"Not for me"},
+  {key:"ditch",     group:3, label:"Ditch this category"},
+];
+
+/* ===========================================================================
+   STATE
+   =========================================================================== */
+let config = {ratings_chips:["imdb","rt_critic","rt_audience"], trakt_authed:false};
+let themes = [];                 // [{id,label,kind,titles:[{tmdb_id,type}],spawned}]
+let ti=0, xi=0, dir=1;
+let started=false, player=null, playerReady=false, pendingPlay=null;
+let settleTimer=null, loadTimeout=null, skips=0, landSeq=0;
+let boardSel=0, loadingMore=false, curTile=null;
+const tileCache = new Map();     // key -> tile | null
+const shownSet = new Set();      // keys shown this session (spawn de-dupe)
+const watchlistedSet = new Set();
+const requestedSet = new Set();
+const btn = {};                  // action key -> button el
+let autoAdvance = localStorage.getItem("discovarr.autoadv") !== "off";
+
+/* ===========================================================================
+   YouTube IFrame API (proven player vars from the Step 0 spike)
+   =========================================================================== */
+const tag=document.createElement("script");
+tag.src="https://www.youtube.com/iframe_api";
+document.head.appendChild(tag);
+window.onYouTubeIframeAPIReady=function(){
+  player=new YT.Player("player",{width:"100%",height:"100%",
+    playerVars:{autoplay:0,mute:0,controls:0,rel:0,playsinline:1,enablejsapi:1,
+      modestbranding:1,iv_load_policy:3,disablekb:1,fs:0},
+    events:{onReady:()=>{ playerReady=true; if(pendingPlay!=null) playCurrent(pendingPlay); },
+            onStateChange:onState, onError:onErr}});
+};
+
+/* ===========================================================================
+   HYDRATION — tiles are {tmdb_id,type} refs; fetch the full tile on demand and
+   cache in-session. Titles with no trailer / trailer_ok=false are dropped on
+   load so we never land on a dead box.
+   =========================================================================== */
+async function hydrate(ref){
+  const k = key(ref);
+  if(tileCache.has(k)) return tileCache.get(k);
+  try{ const t = await fetchJSON(`/api/title/${ref.tmdb_id}?type=${ref.type}`); tileCache.set(k,t); return t; }
+  catch(e){ tileCache.set(k,null); return null; }
+}
+async function hydrateFirsts(){
+  await Promise.allSettled(themes.map(t => t.titles[0] ? hydrate(t.titles[0]) : Promise.resolve()));
+}
+// Resolve xi to a playable title in the current theme, dropping duds as we go.
+async function currentPlayable(){
+  let guard=0;
+  while(guard++ < 40){
+    const th=themes[ti];
+    if(!th || !th.titles.length) return null;
+    if(xi>=th.titles.length) xi=0;
+    if(xi<0) xi=th.titles.length-1;
+    const ref=th.titles[xi];
+    const tile=await hydrate(ref);
+    if(tile && tile.trailer_youtube_key && tile.trailer_ok!==false) return {ref,tile};
+    th.titles.splice(xi,1);          // drop-on-load: dead / no-trailer title
+    if(dir<0) xi--;                  // keep travelling in the same direction
+  }
+  return null;
+}
+function prefetch(){
+  const th=themes[ti]; if(!th) return;
+  const n=th.titles.length;
+  if(n) for(const d of [1,2,-1,-2]){ const r=th.titles[(xi+d+n)%n]; if(r) hydrate(r); }
+  for(const d of [1,2,-1,-2]){ const t=themes[ti+d]; if(t && t.titles[0]) hydrate(t.titles[0]); }
+}
+
+/* ===========================================================================
+   RENDER — billing block, ratings, controls, position dots
+   =========================================================================== */
+function renderControls(){
+  const box=$("#bControls"); box.innerHTML="";
+  let g=-1;
+  ACTIONS.forEach(a=>{
+    if(g!==-1 && a.group!==g){ const s=document.createElement("div"); s.className="sep"; box.appendChild(s); }
+    g=a.group;
+    const b=document.createElement("button");
+    b.className="ico"; b.title=a.label; b.dataset.key=a.key;
+    b.innerHTML=`<svg viewBox="0 0 24 24">${ICONS[a.key]}</svg>`;
+    b.onclick=()=>doAction(a.key);
+    box.appendChild(b); btn[a.key]=b;
+  });
+  const aa=document.createElement("label");
+  aa.className="autoadv"+(autoAdvance?" on":""); aa.id="autoadvBtn";
+  aa.innerHTML='Auto-advance <span class="switch"></span>';
+  aa.onclick=()=>{ autoAdvance=!autoAdvance; aa.classList.toggle("on",autoAdvance);
+    localStorage.setItem("discovarr.autoadv", autoAdvance?"on":"off"); };
+  box.appendChild(aa);
+}
+function setIcon(k,svg){ const b=btn[k]; if(b) b.querySelector("svg").innerHTML=ICONS[svg]; }
+function updateControls(t){
+  const k=`${t.type}:${t.tmdb_id}`;
+  btn.watchlist.classList.toggle("on", watchlistedSet.has(k));
+  btn.request.classList.toggle("on", requestedSet.has(k));
+  setIcon("pause","pause");
+  const dirs=(t.credits&&t.credits.directors)||[];
+  const cast=(t.credits&&t.credits.cast)||[];
+  btn.director.classList.toggle("disabled", dirs.length===0);
+  btn.director.title = dirs.length>1 ? "More from the directors"
+    : dirs.length===1 ? `More from ${dirs[0].name}` : "No director info";
+  btn.cast.classList.toggle("disabled", cast.length===0);
+  btn.cast.title = cast.length ? "Choose a cast member" : "No cast info available";
+}
+function paintTitle(t){
+  const th=themes[ti];
+  $("#bKind").textContent = th.label;
+  $("#bTitle").textContent = t.title;
+  $("#bYear").textContent = metaStr(t) ? `${t.year||""}${t.year?" · ":""}${metaStr(t)}` : (t.year||"");
+  $("#bOverview").textContent = t.overview||"";
+  const ratings=t.ratings||{};
+  $("#bRatings").innerHTML = config.ratings_chips.filter(k=>ratings[k]!=null).map(k=>{
+    const v=ratings[k];
+    const icon = k==="imdb" ? `<span class="imdb-badge">IMDb</span>`
+      : k==="rt_critic" ? `<svg class="rt-ico" viewBox="0 0 24 24">${TOMATO}</svg>`
+      : k==="rt_audience" ? `<svg class="rt-ico pop" viewBox="0 0 24 24">${POPCORN}</svg>`
+      : `<span class="src">${CHIP_SRC[k]||k}</span>`;
+    return `<span class="chip">${icon}<span class="val ${rclass(k,v)}">${v}</span></span>`;
+  }).join("");
+  $("#pmDots").innerHTML = th.titles.map((_,i)=>`<i class="${i===xi?'cur':''}"></i>`).join("");
+  const spillImg = t.backdrop_url || t.poster_url || "";
+  const stillImg = t.poster_url || t.backdrop_url || "";
+  $("#spill").style.backgroundImage  = spillImg ? `url("${spillImg}")` : "";
+  $("#poster").style.backgroundImage = stillImg ? `url("${stillImg}")` : "";
+  updateControls(t);
+}
+
+/* ===========================================================================
+   LAND / PLAY — settle debounce + skip safety
+   =========================================================================== */
+async function land(){
+  const seq=++landSeq;
+  clearTimeout(settleTimer); clearTimeout(loadTimeout);
+  room.classList.add("lit");
+  $("#screen").classList.remove("playing"); $("#screen").classList.add("buffering");
+  const got=await currentPlayable();
+  if(seq!==landSeq) return;                       // superseded by a newer nav
+  if(!got){ $("#screen").classList.remove("buffering"); emptyTheme(); return; }
+  curTile=got.tile;
+  shownSet.add(key(got.ref));
+  paintTitle(got.tile);
+  prefetch();
+  settleTimer=setTimeout(()=>{ if(seq===landSeq) playCurrent(seq); }, 1000);   // dwell on poster ~1s
+}
+function playCurrent(seq){
+  if(seq!=null && seq!==landSeq) return;
+  if(!curTile || !curTile.trailer_youtube_key) return;
+  if(!playerReady){ pendingPlay=seq; return; }
+  pendingPlay=null;
+  player.loadVideoById(curTile.trailer_youtube_key);
+  player.unMute(); player.setVolume(100);
+  loadTimeout=setTimeout(()=>{ if($("#screen").classList.contains("buffering")) skipDud("timed out"); }, 8000);
+}
+function onState(e){
+  if(e.data===YT.PlayerState.PLAYING){
+    skips=0; clearTimeout(loadTimeout);
+    $("#screen").classList.remove("buffering"); $("#screen").classList.add("playing");
+  }
+  if(e.data===YT.PlayerState.ENDED && autoAdvance){ dir=1; goTitle(1); }   // channel loop within theme
+}
+function onErr(){ skipDud("unavailable"); }
+function skipDud(why){
+  skips++;
+  if(skips>8){ toast("Nothing playable here right now — ↓ for the next theme."); skips=0; return; }
+  toast(`Trailer ${why} — skipping`);
+  const th=themes[ti];
+  if(th && th.titles.length) th.titles.splice(xi,1);   // age-gated etc. — drop it too
+  if(dir<0) xi--;
+  land();
+}
+function emptyTheme(){
+  if(themes.length<=1){ showLibraryError(); return; }
+  themes.splice(ti,1); if(ti>=themes.length) ti=0; xi=0; land();
+}
+
+/* ===========================================================================
+   NAVIGATION — titles wrap within a theme; the theme axis is an endless feed
+   (↓ past the end appends fresh generated themes; ↑ above the first stops).
+   =========================================================================== */
+function goTitle(d){ dir=d; const th=themes[ti]; if(!th || !th.titles.length) return;
+  xi=(xi+d+th.titles.length)%th.titles.length; land(); }
+async function goTheme(d){
+  dir=1;
+  if(d>0){
+    if(ti>=themes.length-1) await loadMore();
+    if(ti<themes.length-1){ ti++; xi=0; land(); }
+  } else {
+    if(ti>0){ ti--; xi=0; land(); }   // else gently stop at the top
+  }
+}
+async function loadMore(){
+  if(loadingMore) return; loadingMore=true;
+  try{
+    const seen=themes.map(t=>t.id).filter(id=>id.startsWith("gen:")).join(",");
+    const {reel}=await fetchJSON(`/api/reel/more?limit=5&seen=${encodeURIComponent(seen)}`);
+    const have=new Set(themes.map(t=>t.id));
+    let added=0;
+    for(const r of (reel||[])) if(!have.has(r.id) && r.titles && r.titles.length){
+      themes.push({id:r.id, label:r.label, kind:"Generated", titles:r.titles, spawned:false}); added++;
+    }
+    if(!added) toast("That's the end of the feed for now.");
+  }catch(e){ toast("Couldn't load more — ↓ to retry."); }
+  finally{ loadingMore=false; }
+}
+
+/* ===========================================================================
+   ACTIONS
+   =========================================================================== */
+const personTitles = (id,role) => fetchJSON(`/api/person/${id}/titles?role=${role}`).then(d=>d.titles);
+function doAction(k){
+  if(!curTile) return;
+  const t=curTile, kk=`${t.type}:${t.tmdb_id}`;
+  switch(k){
+    case "pause":     togglePause(); break;
+    case "watchlist": doWatchlist(t,kk); break;
+    case "request":   doRequest(t,kk); break;
+    case "watched":   doWatched(t,kk); break;
+    case "like":      spawn(`Because you liked ${t.title}`,"Personalised",
+                            fetchJSON(`/api/recommendations?tmdb_id=${t.tmdb_id}&type=${t.type}`).then(d=>d.titles)); break;
+    case "director":  doDirector(t); break;
+    case "cast":      openPeoplePicker((t.credits&&t.credits.cast)||[], "cast",
+                            p=>spawn(`More with ${p.name}`,"Personalised", personTitles(p.id,"cast"))); break;
+    case "hide":      doHide(t,kk); break;
+    case "ditch":     doDitch(); break;
+  }
+}
+async function doWatchlist(t,k){
+  watchlistedSet.add(k); btn.watchlist.classList.add("on"); toast("Added to <b>Watchlist</b>");
+  try{ await postJSON("/api/watchlist",{tmdb_id:t.tmdb_id,type:t.type}); }
+  catch(e){ watchlistedSet.delete(k); btn.watchlist.classList.remove("on"); toast("Trakt not connected"); }
+}
+function doRequest(t,k){
+  if(t.type==="movie") sendRequest(t,k,null);                 // one-click
+  else openSeasonPicker(t,k);                                 // TV → season picker
+}
+async function sendRequest(t,k,seasons){
+  requestedSet.add(k); btn.request.classList.add("on"); toast("Requested on <b>Seerr</b>");
+  try{ await postJSON("/api/request",{tmdb_id:t.tmdb_id,type:t.type,seasons:seasons}); }
+  catch(e){ requestedSet.delete(k); btn.request.classList.remove("on"); toast("Request failed"); }
+}
+async function doWatched(t,k){
+  const removed=removeKeyEverywhere(k);                       // optimistic
+  toast("Marked <b>watched</b> — next up");
+  dir=1; land();
+  try{ await postJSON("/api/watched",{tmdb_id:t.tmdb_id,type:t.type}); }
+  catch(e){ reinsert(removed); toast("Trakt not connected — kept it"); }
+}
+async function doHide(t,k){
+  removeKeyEverywhere(k);
+  toast("<b>Not for me</b> — next up");
+  dir=1; land();
+  try{ await postJSON("/api/exclude",{tmdb_id:t.tmdb_id,type:t.type}); }catch(e){}
+}
+async function doDitch(){
+  const th=themes[ti];
+  toast(`Ditched <b>${th.label}</b> — next theme`);
+  if(th.id.startsWith("gen:")){ try{ await postJSON("/api/exclude-theme",{theme_id:th.id}); }catch(e){} }
+  themes.splice(ti,1);
+  if(!themes.length){ showLibraryError(); return; }
+  if(ti>=themes.length) ti=0;
+  xi=0; land();
+}
+function doDirector(t){
+  const dirs=(t.credits&&t.credits.directors)||[];
+  if(!dirs.length){ toast("No director info available"); return; }
+  if(dirs.length===1) spawn(`More from ${dirs[0].name}`,"Personalised", personTitles(dirs[0].id,"crew"));
+  else openPeoplePicker(dirs,"director", p=>spawn(`More from ${p.name}`,"Personalised", personTitles(p.id,"crew")));
+}
+
+// remove a title key from every loaded theme; return records for rollback
+function removeKeyEverywhere(k){
+  const recs=[];
+  themes.forEach(t=>{ const i=t.titles.findIndex(r=>key(r)===k);
+    if(i>=0){ recs.push({t,i,ref:t.titles[i]}); t.titles.splice(i,1); } });
+  return recs;
+}
+function reinsert(recs){ for(const r of recs){ r.t.titles.splice(Math.min(r.i,r.t.titles.length),0,r.ref); } }
+
+// spawn a new row immediately below the current theme and jump in (de-duped vs shown)
+async function spawn(label, kind, titlesPromise){
+  let titles;
+  try{ titles=await titlesPromise; }catch(e){ toast("Couldn't build that row"); return; }
+  const refs=(titles||[]).filter(r=>!shownSet.has(key(r)));
+  if(!refs.length){ toast("Nothing new to show there"); return; }
+  themes.splice(ti+1,0,{id:`spawn:${Date.now()}`, label, kind, titles:refs, spawned:true});
+  dir=1; ti=ti+1; xi=0; land();
+}
+
+function togglePause(){
+  if(!playerReady) return;
+  const st=player.getPlayerState();
+  if(st===YT.PlayerState.PLAYING){ player.pauseVideo(); setIcon("pause","play"); }
+  else { player.playVideo(); setIcon("pause","pause"); }
+}
+function toggleFullscreen(){
+  const el=document.documentElement;
+  if(!document.fullscreenElement){ if(el.requestFullscreen) el.requestFullscreen(); }
+  else if(document.exitFullscreen) document.exitFullscreen();
+}
+
+/* ===========================================================================
+   PICKERS — cast / co-directors (people strip) and TV seasons (list)
+   =========================================================================== */
+let picker=null;   // {layout, items, sel, onPick, head}
+function openOverlay(){ $("#overlay").classList.add("show"); if(started && playerReady) player.pauseVideo(); }
+function closeOverlay(resume){ $("#overlay").classList.remove("show"); picker=null;
+  if(resume && started && playerReady){ player.playVideo(); setIcon("pause","pause"); } }
+
+function openPeoplePicker(people, kind, onPick){
+  if(!people.length){ toast(kind==="cast"?"No cast info available":"No director info"); return; }
+  picker={layout:"strip", items:people, sel:0, onPick, head:(kind==="cast"?"Choose a cast member":"Choose a director")};
+  renderPicker(); openOverlay();
+}
+function openSeasonPicker(t,k){
+  const items=[{label:"Season 1", seasons:[1]}, {label:"All seasons", seasons:null}];
+  for(const s of (t.seasons||[])) items.push({label:`Season ${s.season_number}`,
+    sub:`${s.episode_count||"?"} eps`, seasons:[s.season_number]});
+  picker={layout:"list", items, sel:0, head:`Request <b>${t.title}</b>`, onPick:item=>sendRequest(t,k,item.seasons)};
+  renderPicker(); openOverlay();
+}
+function renderPicker(){
+  const box=$("#picker");
+  if(picker.layout==="strip"){
+    box.innerHTML=`<div class="picker-head">${picker.head}</div><div class="people">`+
+      picker.items.map((p,i)=>{
+        const face = p.profile_url ? `style="background-image:url('${p.profile_url}')"` : "";
+        const init = p.profile_url ? "" : (p.name||"?").split(" ").map(w=>w[0]).slice(0,2).join("");
+        return `<div class="person${i===picker.sel?' cur':''}" data-i="${i}">
+          <div class="face" ${face}>${init}</div><div class="nm">${p.name||""}</div></div>`;
+      }).join("")+`</div>`+
+      `<div class="picker-foot"><kbd>←</kbd><kbd>→</kbd> move · <kbd>↵</kbd> pick · <kbd>Esc</kbd> back</div>`;
+    box.querySelectorAll(".person").forEach(el=>el.onclick=()=>{ picker.sel=+el.dataset.i; pickerPick(); });
+  } else {
+    box.innerHTML=`<div class="picker-head">${picker.head}</div><div class="seasons">`+
+      picker.items.map((s,i)=>`<div class="season${i===picker.sel?' cur':''}" data-i="${i}">
+        <span class="sn">${s.label}</span>${s.sub?`<span class="se">${s.sub}</span>`:""}</div>`).join("")+
+      `</div><div class="picker-foot"><kbd>↑</kbd><kbd>↓</kbd> move · <kbd>↵</kbd> request · <kbd>Esc</kbd> cancel</div>`;
+    box.querySelectorAll(".season").forEach(el=>el.onclick=()=>{ picker.sel=+el.dataset.i; pickerPick(); });
+  }
+  const curEl=box.querySelector(".cur"); if(curEl) curEl.scrollIntoView({block:"nearest",inline:"nearest"});
+}
+function pickerMove(d){ if(!picker) return; picker.sel=(picker.sel+d+picker.items.length)%picker.items.length; renderPicker(); }
+function pickerPick(){ if(!picker) return; const item=picker.items[picker.sel], cb=picker.onPick;
+  closeOverlay(false); cb(item); }
+function pickerKey(e){
+  if(e.key==="ArrowRight"||e.key==="ArrowDown"){ pickerMove(1); e.preventDefault(); }
+  else if(e.key==="ArrowLeft"||e.key==="ArrowUp"){ pickerMove(-1); e.preventDefault(); }
+  else if(e.key==="Enter"||e.key===" "){ pickerPick(); e.preventDefault(); }
+  else if(e.key==="Escape"){ closeOverlay(true); e.preventDefault(); }
+}
+
+/* ===========================================================================
+   TOAST
+   =========================================================================== */
+let toastTimer=null;
+function toast(html){ const t=$("#toast"); t.innerHTML=html; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"), 2200); }
+
+/* ===========================================================================
+   PROGRAMME BOARD (start screen + re-summonable jump menu)
+   =========================================================================== */
+function boardStill(th){ const r=th.titles[0]; const t=r&&tileCache.get(key(r));
+  return t ? (t.backdrop_url||t.poster_url||"") : ""; }
+function buildBoard(){
+  const p=$("#programme"); p.innerHTML="";
+  themes.forEach((th,i)=>{
+    const row=document.createElement("div");
+    row.className="prog-row"+(i===boardSel?" cur":"");
+    const img=boardStill(th);
+    row.innerHTML=`<div class="prog-still" style="${img?`background-image:url('${img}')`:""}"></div>
+      <div class="prog-meta"><div class="prog-name">${th.label}</div><div class="prog-tag">${th.kind}</div></div>
+      <div class="prog-count">${th.titles.length}</div>`;
+    row.onclick=()=>{ boardSel=i; startFrom(i); };
+    p.appendChild(row);
+  });
+  const sel=p.children[boardSel]; if(sel) sel.scrollIntoView({block:"nearest"});
+}
+function boardOpen(){ return !$("#board").classList.contains("hide"); }
+function moveBoard(d){ boardSel=(boardSel+d+themes.length)%themes.length; buildBoard(); }
+function openBoard(){ boardSel=ti; buildBoard();
+  if(started && playerReady) player.pauseVideo();
+  $("#board").classList.remove("hide"); }
+function closeBoard(){ $("#board").classList.add("hide");
+  if(started && playerReady){ player.playVideo(); setIcon("pause","pause"); } }
+function startFrom(i){
+  ti=i; xi=0; dir=1;
+  $("#board").classList.add("hide");      // house lights down...
+  started=true;
+  setTimeout(land, 350);                  // ...then the projector strikes
+}
+function boardKey(e){
+  if(e.key==="ArrowDown"){ moveBoard(1); e.preventDefault(); }
+  else if(e.key==="ArrowUp"){ moveBoard(-1); e.preventDefault(); }
+  else if(e.key==="Enter"||e.key===" "){ startFrom(boardSel); e.preventDefault(); }
+  else if((e.key==="Escape"||e.key==="m"||e.key==="M") && started){ closeBoard(); e.preventDefault(); }
+}
+function showLibraryError(){ started=false; $("#board").classList.remove("hide"); $("#board").classList.add("error"); }
+
+/* ===========================================================================
+   KEYS
+   =========================================================================== */
+document.addEventListener("keydown",e=>{
+  if(picker){ pickerKey(e); return; }
+  if(boardOpen()){ boardKey(e); return; }
+  if(!started) return;
+  switch(e.key){
+    case "ArrowRight": goTitle(1);  e.preventDefault(); break;
+    case "ArrowLeft":  goTitle(-1); e.preventDefault(); break;
+    case "ArrowDown":  goTheme(1);  e.preventDefault(); break;
+    case "ArrowUp":    goTheme(-1); e.preventDefault(); break;
+    case " ":          togglePause(); e.preventDefault(); break;
+    case "m": case "M": case "Escape": openBoard(); break;
+    case "w": case "W": doAction("watchlist"); break;
+    case "r": case "R": doAction("request"); break;
+    case "f": case "F": toggleFullscreen(); break;
+  }
+});
+$("#cover").addEventListener("click",()=>togglePause());      // tap video = pause/play
+
+/* ===========================================================================
+   INIT — fetch config + themes, build one unified list (standard → reel, with
+   "Because you watched" rows already interspersed by the backend), hydrate
+   first titles for the board, show the programme board.
+   =========================================================================== */
+function kindFor(id){ return id.startsWith("byw:") ? "Personalised" : id.startsWith("gen:") ? "Generated" : "Standard"; }
+async function init(){
+  $("#board").classList.remove("error");
+  try{
+    const [cfg, data] = await Promise.all([ fetchJSON("/api/config"), fetchJSON("/api/themes?limit=10") ]);
+    config=cfg;
+    const list=[];
+    for(const t of (data.nav||[]))  list.push({id:t.id,label:t.label,kind:"Standard",titles:t.titles||[],spawned:false});
+    for(const t of (data.reel||[])) list.push({id:t.id,label:t.label,kind:kindFor(t.id),titles:t.titles||[],spawned:false});
+    themes=list.filter(t=>t.titles.length);     // a theme resolving to zero titles renders not at all
+    if(!themes.length){ showLibraryError(); return; }
+    ti=0; xi=0; boardSel=0;
+    await hydrateFirsts();
+    buildBoard();
+    $("#connectHint").classList.toggle("show", !config.trakt_authed);
+  }catch(e){ showLibraryError(); }
+}
+$("#retryBtn").addEventListener("click", init);
+
+renderControls();
+init();
+</script>
 </body>
 </html>

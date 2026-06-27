@@ -638,6 +638,12 @@ class ExcludeThemeBody(BaseModel):
     theme_id: str
 
 
+class RequestBody(BaseModel):
+    tmdb_id: int
+    type: MediaType
+    seasons: Optional[list[int]] = None   # TV: specific seasons; None/[] -> all
+
+
 @app.get("/api/health")
 async def health():
     out = {}
@@ -760,10 +766,10 @@ async def add_watchlist(b: ActionBody):
 
 
 @app.post("/api/request")
-async def request_title(b: ActionBody):
+async def request_title(b: RequestBody):
     body = {"mediaType": b.type, "mediaId": b.tmdb_id}
     if b.type == "tv":
-        body["seasons"] = "all"
+        body["seasons"] = b.seasons if b.seasons else "all"   # picker sends a list; else all
     r = await client.post(f"{settings.seerr_base}/api/v1/request",
                           headers={"X-Api-Key": settings.seerr_api_key}, json=body)
     if r.status_code == 409:
