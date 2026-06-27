@@ -74,9 +74,9 @@ button{font-family:inherit;color:inherit;}
 .kind{font-family:var(--display);font-weight:700;text-transform:uppercase;
   letter-spacing:.22em;font-size:12px;color:var(--marquee);margin-bottom:6px;}
 .kind .dot{color:var(--ink-dim);margin:0 8px;}
-.overview{font-size:clamp(13px,1.15vw,15.5px);line-height:1.5;color:var(--ink);
-  opacity:.84;max-width:62ch;margin:10px 0 0;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.overview{font-size:clamp(13px,1.15vw,15.5px);line-height:1.55;color:var(--ink);
+  opacity:.84;max-width:66ch;margin:10px 0 0;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
 
 /* ratings — disciplined, monochrome, tabular. Colour belongs to the film. */
 .ratings{display:flex;gap:20px;margin-top:14px;font-variant-numeric:tabular-nums;}
@@ -228,34 +228,35 @@ button{font-family:inherit;color:inherit;}
    present → no broken posters). Bad IDs just trigger the skip logic, which is
    itself a feature on show. Edit freely. Ratings/overviews are illustrative.
    =========================================================================== */
+// movies carry `dur` (runtime mins); TV carry `sea` (seasons) + `eps` (for single-season).
 const THEMES = [
   { id:"trending", label:"Trakt Trending", kind:"Standard", titles:[
-    {t:"Dune: Part Two", y:2024, yt:"Way9Dexny3w", p:"heM4XKC0jA8fTSNe8F7oUkcJV7Z", r:{imdb:"8.5",rt_critic:"92",rt_audience:"95"},
-      o:"Paul Atreides unites with the Fremen to wage war against the conspirators who destroyed his family."},
-    {t:"Oppenheimer", y:2023, yt:"uYPbbksJxIg", p:"8Gxv8gSFCU0XGDykEGv7zR1n2ua", r:{imdb:"8.3",rt_critic:"93",rt_audience:"91"},
-      o:"The story of J. Robert Oppenheimer and his role in the development of the atomic bomb."},
-    {t:"The Batman", y:2022, yt:"mqqft2x_Aa4", p:"74xTEgt7R36Fpooo50r9T25onhq", r:{imdb:"7.8",rt_critic:"85",rt_audience:"87"},
-      o:"A vengeful Batman tracks a sadistic killer through the corrupt streets of Gotham City."},
-    {t:"Mad Max: Fury Road", y:2015, yt:"hEJnMQG9ev8", p:"hA2ple9q4qnwxp3hKVNhroipsir", r:{imdb:"8.1",rt_critic:"97",rt_audience:"86"},
-      o:"On a desert road two rebels run from a tyrant and his war boys in a relentless chase."},
+    {t:"Dune: Part Two", y:2024, dur:166, yt:"Way9Dexny3w", p:"heM4XKC0jA8fTSNe8F7oUkcJV7Z", r:{imdb:"8.5",rt_critic:"92",rt_audience:"95"},
+      o:"Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family. Facing a choice between the love of his life and the fate of the known universe, he endeavours to prevent a terrible future only he can foresee."},
+    {t:"Oppenheimer", y:2023, dur:180, yt:"uYPbbksJxIg", p:"8Gxv8gSFCU0XGDykEGv7zR1n2ua", r:{imdb:"8.3",rt_critic:"93",rt_audience:"91"},
+      o:"During World War II, physicist J. Robert Oppenheimer is recruited to lead the top-secret Manhattan Project. Over years of feverish work in the New Mexico desert, he and his team race to build the atomic bomb — a triumph of science that culminates in the Trinity test and haunts him for the rest of his life."},
+    {t:"The Batman", y:2022, dur:176, yt:"mqqft2x_Aa4", p:"74xTEgt7R36Fpooo50r9T25onhq", r:{imdb:"7.8",rt_critic:"85",rt_audience:"87"},
+      o:"In his second year of fighting crime, Batman uncovers corruption in Gotham City that connects to his own family while facing a serial killer known as the Riddler. As the bodies of the city's elite pile up, the Dark Knight is drawn deep into the criminal underworld and forced to question his own legacy."},
+    {t:"Mad Max: Fury Road", y:2015, dur:120, yt:"hEJnMQG9ev8", p:"hA2ple9q4qnwxp3hKVNhroipsir", r:{imdb:"8.1",rt_critic:"97",rt_audience:"86"},
+      o:"In a post-apocalyptic wasteland, Max teams up with Furiosa, a woman in rebellion against the tyrant Immortan Joe. Together they flee across the desert in an armoured war rig with a group of women Joe intends to keep captive, pursued by his fanatical War Boys in a relentless, fire-and-blood chase."},
   ]},
   { id:"gen-mind", label:"Mind-Benders", kind:"80s–10s · Generated", titles:[
-    {t:"Inception", y:2010, yt:"YoHD9XEInc0", p:"xlaY2zyzMfkhk0HSC5VUwzoZPU1", r:{imdb:"8.8",rt_critic:"87",rt_audience:"91"},
-      o:"A thief who steals corporate secrets through dream-sharing is offered a chance to erase his past."},
-    {t:"Interstellar", y:2014, yt:"zSWdZVtXT7E", p:"yQvGrMoipbRoddT0ZR8tPoR7NfX", r:{imdb:"8.7",rt_critic:"73",rt_audience:"86"},
-      o:"Explorers travel through a wormhole in an attempt to ensure humanity's survival."},
-    {t:"The Matrix", y:1999, yt:"vKQi3bBA1y8", p:"dXNAPwY7VrqMAo51EKhhCJfaGb5", r:{imdb:"8.7",rt_critic:"83",rt_audience:"85"},
-      o:"A hacker learns the shocking truth about his reality and his role in the war against its controllers."},
-    {t:"The Dark Knight", y:2008, yt:"EXeTwQWrcwY", p:"qJ2tW6WMUDux911r6m7haRef0WH", r:{imdb:"9.0",rt_critic:"94",rt_audience:"94"},
-      o:"Batman faces the Joker, a criminal mastermind bent on plunging Gotham into anarchy."},
+    {t:"Inception", y:2010, dur:148, yt:"YoHD9XEInc0", p:"xlaY2zyzMfkhk0HSC5VUwzoZPU1", r:{imdb:"8.8",rt_critic:"87",rt_audience:"91"},
+      o:"Dom Cobb is the best in the dangerous art of extraction: stealing secrets from deep within the subconscious during the dream state. Offered a chance to regain his old life as payment for the impossible, Cobb must instead pull off inception — planting an idea into a target's mind without their knowing."},
+    {t:"Interstellar", y:2014, dur:169, yt:"zSWdZVtXT7E", p:"yQvGrMoipbRoddT0ZR8tPoR7NfX", r:{imdb:"8.7",rt_critic:"73",rt_audience:"86"},
+      o:"In the near future, a dying Earth leaves humanity's survival hanging by a thread. A team of explorers led by a former pilot undertakes the most important mission in history, travelling through a newly discovered wormhole to push beyond the limits of human space travel and find a new home among the stars."},
+    {t:"The Matrix", y:1999, dur:136, yt:"vKQi3bBA1y8", p:"dXNAPwY7VrqMAo51EKhhCJfaGb5", r:{imdb:"8.7",rt_critic:"83",rt_audience:"85"},
+      o:"Thomas Anderson, a hacker known as Neo, feels something is wrong with the world and is haunted by one question: what is the Matrix? When mysterious strangers offer him the answer, he learns the shocking truth — reality is a simulation, and he may be the one prophesied to free humankind."},
+    {t:"The Dark Knight", y:2008, dur:152, yt:"EXeTwQWrcwY", p:"qJ2tW6WMUDux911r6m7haRef0WH", r:{imdb:"9.0",rt_critic:"94",rt_audience:"94"},
+      o:"With the help of Lieutenant Gordon and District Attorney Harvey Dent, Batman sets out to dismantle the criminal organisations that plague Gotham. The partnership proves effective — until they find themselves prey to a rising mastermind known as the Joker, who thrusts the city into chaos."},
   ]},
   { id:"bcw-bb", label:"Because you watched Breaking Bad", kind:"Personalised", titles:[
-    {t:"Better Call Saul", y:2015, yt:"HtRGzMnLU5c", p:"zjg4jpK1Wp2kiRvtt5ND0kznako", r:{imdb:"9.0",rt_critic:"98",rt_audience:"93"},
-      o:"The trials of small-time lawyer Jimmy McGill on his way to becoming Saul Goodman."},
-    {t:"Ozark", y:2017, yt:"5hAXVqrljbs", p:"pCGyPVrI9Fzw6rE1Pvi4BIXF6ET", r:{imdb:"8.5",rt_critic:"81",rt_audience:"90"},
-      o:"A financial adviser drags his family into money laundering for a drug cartel."},
-    {t:"Stranger Things", y:2016, yt:"b9EkMc79ZSU", p:"uOOtwVbSr4QDjAGIifLDwpb2Pdl", r:{imdb:"8.7",rt_critic:"92",rt_audience:"90"},
-      o:"A small town uncovers a mystery of secret experiments and one very strange little girl."},
+    {t:"Better Call Saul", y:2015, sea:6, yt:"HtRGzMnLU5c", p:"zjg4jpK1Wp2kiRvtt5ND0kznako", r:{imdb:"9.0",rt_critic:"98",rt_audience:"93"},
+      o:"Six years before he meets Walter White, small-time lawyer Jimmy McGill scrapes out a living in Albuquerque, dreaming of something bigger. His slow transformation into silver-tongued criminal lawyer Saul Goodman pulls in everyone around him — his brother, his partner Kim, and a quiet ex-cop named Mike."},
+    {t:"Ozark", y:2017, sea:4, yt:"5hAXVqrljbs", p:"pCGyPVrI9Fzw6rE1Pvi4BIXF6ET", r:{imdb:"8.5",rt_critic:"81",rt_audience:"90"},
+      o:"Financial adviser Marty Byrde abruptly moves his family from Chicago to a summer resort community in the Missouri Ozarks. With a drug cartel breathing down his neck, he must launder an impossible sum of money to keep his family alive — drawing them all ever deeper into the criminal world."},
+    {t:"Stranger Things", y:2016, sea:4, yt:"b9EkMc79ZSU", p:"uOOtwVbSr4QDjAGIifLDwpb2Pdl", r:{imdb:"8.7",rt_critic:"92",rt_audience:"90"},
+      o:"When a young boy vanishes, a small town uncovers a mystery involving secret government experiments, terrifying supernatural forces and one very strange little girl. His friends, family and the local police are drawn into an extraordinary battle against forces from another dimension."},
   ]},
 ];
 
@@ -272,6 +273,12 @@ const POPCORN='<path d="M6.2 9h11.6l-1.2 11.4a1 1 0 0 1-1 .9H8.4a1 1 0 0 1-1-.9z
 // quality tint thresholds: IMDb /10, RT %.
 function rclass(key,v){const n=parseFloat(v);const t=key==="imdb"?[7.5,6]:[75,60];
   return n>=t[0]?"v-good":n>=t[1]?"v-ok":"v-bad";}
+// movie runtime "2h 46m"; TV season count (or episode count if a single season)
+function metaStr(c){
+  if(c.sea!=null) return c.sea>1 ? `${c.sea} seasons` : `${c.eps||1} episodes`;
+  if(c.dur!=null){const h=Math.floor(c.dur/60), m=c.dur%60; return h?`${h}h ${m}m`:`${m}m`;}
+  return "";
+}
 
 /* ---- ICONS (inline SVG, stroke) ---------------------------------------- */
 const ICONS = {
@@ -339,7 +346,7 @@ function paintTitle(){
   const c=cur(), th=THEMES[ti];
   $("#bKind").textContent = th.label;          // theme name only — no kind/id suffix
   $("#bTitle").textContent=c.t;
-  $("#bYear").textContent=c.y;
+  $("#bYear").textContent = metaStr(c) ? `${c.y} · ${metaStr(c)}` : `${c.y}`;
   $("#bOverview").textContent=c.o;
   $("#bRatings").innerHTML = CHIPS.filter(k=>c.r[k]).map(k=>{
     const v=c.r[k];
