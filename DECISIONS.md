@@ -265,7 +265,9 @@ badge, RT tomato (critic), popcorn (audience). **Light** good/ok/bad quality tin
 
 ### Build-time backend additions surfaced by the grill (Step 2 is NOT frontend-only)
 A small **"discovery slice"** rides alongside the frontend.
-**Cluster 1–3 DONE & verified live 2026-06-27** (commit `6fb185e`): items 1, 2, 8, 10, 11.
+**SLICE COMPLETE — all 11 items DONE & verified live 2026-06-27** (clusters 1–5, commits
+`6fb185e` → `0eb5014` → `a52b044`). Next Step-2 work is the theatre `index.html` only.
+**Cluster 1–3** (commit `6fb185e`): items 1, 2, 8, 10, 11.
 1. ✅ **`/api/config`** — ratings chips + `trakt_authed` flag (+ any display config the FE needs).
 2. ✅ **Tile contract:** add `runtime` (movie) + `number_of_seasons`/`number_of_episodes` (tv) —
    `append_to_response` already returns them. *(+ specials-stripped `seasons` list, see item 11.)*
@@ -280,15 +282,19 @@ A small **"discovery slice"** rides alongside the frontend.
    `/api/watchlist` path; not yet exercised against real Trakt history.)*
 5. ✅ **Theme exclusion** *(cluster 4)*: `excluded_themes` table + `POST /api/exclude-theme` +
    a filter in `get_themes` (drops ditched `gen:<label>` combos from the reel).
-6. **"Because you watched":** sample **2–3 random titles** from Trakt watched history →
-   recommendations → rows interspersed in the `/api/themes` reel (cached 12h, seeds rotate
-   per cache cycle).
-7. **Endless feed:** a re-call of `/api/themes` appends a fresh generated batch (consider
-   excluding already-seen / ditched themes).
+6. ✅ **"Because you watched"** *(cluster 5, commit `a52b044`)*: 2–3 rows seeded from random
+   Trakt watched-history titles → recommendations, cached 12h (seeds rotate per cache cycle),
+   filtered fresh against the live block and interspersed every ~3 generated themes in
+   `/api/themes`. Empty without Trakt/history.
+7. ✅ **Endless feed** *(cluster 5)*: `GET /api/reel/more?limit&seen=` returns a fresh generated
+   batch (ditched + comma-separated already-seen ids excluded), via shared `build_generated_reel()`.
 8. ✅ **`trailer_ok` via YouTube oEmbed** probe in `build_tile` (cached on the tile, fires only
    on a cold tile, **fails open**) → frontend drop-on-load of dead/non-embeddable trailers.
-9. **Randomised theme resolution:** quality-bounded random page for discover; shuffle for
-   MDBList lists / trending / oversized watchlist (sample to the cap, re-rolled per pull).
+9. ✅ **Randomised theme resolution** *(cluster 5)*: discover pulls a quality-bounded random page
+   (1–15, keep `vote_count.gte`) then shuffles (page-1 fallback for sparse combos); trakt trending
+   samples cap from the top ~100; MDBList lists shuffle before cap; watchlist shows all if it fits
+   else shuffles a sample. Re-rolled per pull → the generated reel + trending/lists are now
+   **uncached per request** (the randomisation is the point; ~10–20 upstream calls per `/api/themes`).
 10. ✅ **Credits on the tile** (`append_to_response=credits`): director + top-10 cast w/
     `profile_path` (as `profile_url`, w185) + person `id` — powers the tooltip, cast picker and
     director/cast spawns with no extra call. *Director = crew `Director` (movie) / `created_by`

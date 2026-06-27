@@ -43,9 +43,30 @@ backend **"discovery slice"** built first so the FE binds to real endpoints.
   `excluded_themes` table (ditched `gen:` combos filtered out of the reel). Verified: recs→20,
   Nolan crew→14, DiCaprio cast→22, ditch removes the combo. `/api/watched` not yet run against
   real Trakt (wired like the proven watchlist path).
-- **Remaining slice (cluster 5 = NEXT):** *Because you watched* random-seeded rows (item 6);
-  endless-feed re-roll (7); randomised theme resolution — quality-bounded random page for
-  discover, shuffle for lists/trending (9). Then the theatre `index.html`.
+- **Discovery slice cluster 5 DONE & verified live 2026-06-27** (commit `a52b044`): items 6,
+  7, 9. *Because you watched* random-seeded rows (cached 12h, interspersed); endless-feed
+  `GET /api/reel/more?limit&seen=`; randomised theme resolution (random discover page + shuffle,
+  trending/list/watchlist sampling). Plus dev `POST /api/admin/unexclude-theme`. Verified:
+  two pulls differ; byw rows labelled from real history; reel/more honours `seen`; unexclude clears.
+- **THE BACKEND DISCOVERY SLICE IS COMPLETE (all 11 items).** The ONLY remaining Step-2 work is
+  the theatre **`app/web/index.html`** (currently a 29-line placeholder) built to the locked spec
+  in `DECISIONS.md` "Step 2", using `design-proto/` as the visual reference (delete proto once shipped).
+
+## API surface the frontend binds to (all live + verified)
+
+- `GET /api/config` → `{ratings_chips, trakt_authed}`.
+- `GET /api/themes?limit=10` → `{nav:[{id,label,titles:[{tmdb_id,type}]}], reel:[…incl. byw:* rows]}`.
+- `GET /api/reel/more?limit=5&seen=<csv theme ids>` → `{reel:[…]}` (endless feed).
+- `GET /api/title/{tmdb_id}?type=movie|tv&fresh=` → the tile contract (title/year/overview/poster/
+  backdrop/trailer_youtube_key/**trailer_ok**/**runtime**/**number_of_seasons**/**number_of_episodes**/
+  **seasons**/**credits{directors,cast[id,name,profile_url]}**/ratings/awards/requested).
+- `GET /api/recommendations?tmdb_id&type` → `{titles:[…]}` (more like this).
+- `GET /api/person/{person_id}/titles?role=cast|crew` → `{titles:[…]}` (cast / director spawn).
+- `POST /api/watchlist` · `POST /api/request` (TV adds `seasons:"all"` — picker will send a list) ·
+  `POST /api/watched` · `POST /api/exclude` (hide title) · `POST /api/exclude-theme` — body
+  `{tmdb_id,type}` except exclude-theme `{theme_id}`.
+- `POST /api/admin/flush` · `POST /api/admin/unexclude-theme[?theme_id=]` (dev).
+- `POST /api/trakt/device` + `/poll` (one-time auth, already done).
 
 **Step 3** (deploy: Caddy `discov.arr` route in arr-stack repo + Pi-hole record + Tailscale DNS
 bounce) — NOT started.
