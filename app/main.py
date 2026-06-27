@@ -262,6 +262,7 @@ async def tmdb_title(tmdb_id: int, mtype: MediaType) -> dict:
         "number_of_seasons": n_seasons,
         "number_of_episodes": n_episodes,
         "seasons": seasons,
+        "genres": [g["name"] for g in (d.get("genres") or []) if g.get("name")],
         "credits": _extract_credits(d, mtype),
     }
 
@@ -527,7 +528,7 @@ async def build_tile(tmdb_id: int, mtype: MediaType, fresh: bool = False) -> dic
         "trailer_youtube_key": trailer_key, "trailer_ok": trailer_ok,
         "runtime": base["runtime"], "number_of_seasons": base["number_of_seasons"],
         "number_of_episodes": base["number_of_episodes"], "seasons": base["seasons"],
-        "credits": base["credits"],
+        "genres": base["genres"], "credits": base["credits"],
         "ratings": ratings, "awards": None, "requested": False,
     }
     cache_set(ckey, tile, TTL_TITLE)
