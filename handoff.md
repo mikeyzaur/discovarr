@@ -3,6 +3,11 @@
 Current-state pointer for a fresh session. Concept + decisions: `DECISIONS.md`. Original
 brief: `discov-handover.md`. KB: `homelab-kb/apps/discovarr.md`. Keep this lean.
 
+**STATUS: v1.0 — TAGGED 2026-06-27, maintenance-only.** Steps 0–3 shipped + the standard-theme
+rejig (6 grilled rows), Top-10 #N badges, and the watchlist on/off toggle. Live at
+`https://discov.arr/`. Future work = bug-fixes + the explicitly-deferred list in `DECISIONS.md`
+(iPhone & Android apps parked).
+
 ## What this is
 
 Trailer-first discovery app for the homelab — theatre-mode YouTube trailer reel, 2-D
@@ -131,10 +136,10 @@ is retired. **Gotcha hit:** the arr-stack Caddyfile is bind-mounted `:ro`, so a 
   Step-2 build time (Trakt tokens copied across; stale `app_discovarr_db` kept as rollback,
   safe to `docker volume rm` once confident). Full note in `DECISIONS.md` Step-1 gotchas.
 
-## Open items (small)
+## Open items (small, post-v1.0 optional)
 
-- **Award Winners** nav theme still a placeholder `list_id` → returns empty. Wire a real
-  MDBList Oscar/awards list in `config.toml`.
+- ~~Award Winners placeholder~~ — **RESOLVED:** the standard nav was regrilled for v1.0
+  (6 rows, see `DECISIONS.md` "Standard nav themes — GRILLED + BUILT"); Award Winners dropped.
 - **Trakt rating pane** the user liked — surface the Trakt score (already in the MDBList
   ratings as `trakt`, zero extra calls) and optionally the vote distribution
   (`/shows/{id}/ratings`, one extra cached call). Confirm which pane before building.
@@ -158,8 +163,8 @@ is retired. **Gotcha hit:** the arr-stack Caddyfile is bind-mounted `:ro`, so a 
   tokens), TMDB/MDBList/Trakt/Seerr clients, tile contract, theme engine (generated reel +
   standard nav), routes `/api/{health,title/{id},themes,exclude,watchlist,request,admin/flush,
   trakt/device,trakt/device/poll}`, static mount. Use grep, not line numbers.
-- `app/config.toml` — nav (standard) themes, generated genres/decades, rating chips, TTLs,
-  per-theme cap. (Award Winners `list_id` still a placeholder.)
+- `app/config.toml` — the 6 standard nav themes (grilled v1.0), generated genres/decades,
+  rating chips, TTLs, per-theme cap.
 - `app/docker-compose.yml` — `name: discovarr`, container `discovarr-api`, port 8001, network
   `arr-stack_media_net` (external), volume `discovarr_db`.
 - `app/web/index.html` — **the built theatre UI** (was the placeholder). Single-file HTML/CSS/JS;

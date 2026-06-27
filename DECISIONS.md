@@ -3,10 +3,13 @@
 Outcomes from the concept grilling. Records *what we settled and why*, so the handover's
 open assumptions don't get silently re-litigated.
 
+**STATUS: v1.0 — TAGGED 2026-06-27, maintenance-only.** All four steps shipped, plus the
+standard-theme rejig (grilled + built). Future work = bug-fixes + the explicitly-deferred list.
+
 ## Build spine
 **Step 0** trailer spike ✅ → **Step 1** full backend + all four APIs ✅ → **Step 2** theatre
-frontend + discovery slice (**BUILT 2026-06-27**, in visual fine-tuning) → **Step 3** deploy
-(Caddy + Pi-hole + Tailscale).
+frontend + discovery slice ✅ → **Step 3** deploy (Caddy + Pi-hole + Tailscale) ✅ →
+**v1.0 TAGGED 2026-06-27 (maintenance-only).**
 Decided *not* to stage the APIs —
 bring the whole data layer in at Step 1 rather than half-building it.
 
@@ -328,14 +331,26 @@ A small **"discovery slice"** rides alongside the frontend.
 11. ✅ **Seasons list on the tile** (season number + `episode_count`, specials/season-0 dropped)
     for the TV request picker; request sends `seasons:[…]`.
 
-### Open / deferred (NOT part of this lock)
-- **Top-5 standard themes** — to be grilled separately. Award Winners still needs a real
-  MDBList `list_id`; decide whether Trakt Trending includes TV.
-- **TV-remote** button-cramming optimisation — backlogged (browser + iPhone are fine for v1).
+### Standard nav themes — GRILLED + BUILT for v1.0 (2026-06-27)
+Six mixed movie+TV rows, in order (row 1 = default landing; a row that resolves empty is
+dropped at serve time). Award Winners (placeholder list_id) dropped; "Trending includes TV" = yes.
+1. **Your Watchlist** — hidden when empty → you land on Top 10. Icon reflects Trakt membership
+   (seeded from `/api/config`) and **toggles off to remove** (`POST /api/watchlist/remove`).
+2. **Top 10 This Week** — Trakt most-watched (weekly), ranked cross-type chart, **#N badges**.
+3. **Trending** — movies + TV merged (was movie-only).
+4. **Critically Acclaimed** — `tmdb_discover` `vote_average.desc` + vote-count floor (TV clamped to 300).
+5. **Based on a Book** — film + TV adaptations merged (`k0meta/based_on_books_{movies,shows}`).
+6. **Anticipated** — most-anticipated upcoming (Trakt).
+Mechanics: `mtype="both"` fan-out + blend (`_merge_types`); `trakt_watched_chart` (ranked) +
+`trakt_anticipated`; mdblist multi-list (`list_ids`); empty-row drop in `get_themes`.
 
-## Explicitly deferred
-- iPhone PWA polish / native iOS app — after browser proves out.
-- Android TV native app — validate the Google TV browser first.
+### Open / deferred (NOT part of v1.0)
+- **TV-remote** button-cramming optimisation — backlogged (browser + iPhone are fine for v1).
+- **Trakt rating pane** — optional; the Trakt score is already in the MDBList ratings.
+
+## Explicitly deferred — PARKED for v1.0 (2026-06-27)
+- **iPhone app / PWA polish — parked.** Browser-on-iPhone is the v1.0 path (proven in Step 0).
+- **Android / Google TV native app — parked.** Validate the Google TV browser first.
 - Awards as a per-title badge (awards-as-a-theme covers most of it).
 - Multi-user / sharing with mates (implies per-user Trakt tokens).
 - True trailer pre-buffering (poster-instant + lazy-mount first; only revisit if it grates).
