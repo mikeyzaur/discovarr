@@ -58,7 +58,7 @@ button{font-family:inherit;color:inherit;}
 #spinner{position:absolute;left:50%;top:50%;width:34px;height:34px;z-index:2;
   margin:-17px;border:3px solid rgba(242,235,223,.25);border-top-color:var(--ink);
   border-radius:50%;animation:spin 1s linear infinite;opacity:0;transition:opacity .2s;}
-#screen.buffering #spinner{opacity:.8;}
+#screen.buffering #spinner{opacity:.8;transition:opacity .25s ease 1.2s;}  /* only appears if loading drags past ~1.2s */
 @keyframes spin{to{transform:rotate(360deg);}}
 
 /* ---- billing block (the lower letterbox bar = part of the film frame) --- */
@@ -333,7 +333,7 @@ let config = {ratings_chips:["imdb","rt_critic","rt_audience"], trakt_authed:fal
 let themes = [];                 // [{id,label,kind,titles:[{tmdb_id,type}],spawned}]
 let ti=0, xi=0, dir=1;
 let started=false, player=null, playerReady=false, pendingPlay=null;
-let settleTimer=null, loadTimeout=null, skips=0, landSeq=0;
+let settleTimer=null, loadTimeout=null, revealTimer=null, skips=0, landSeq=0;
 let boardSel=0, loadingMore=false, curTile=null;
 const tileCache = new Map();     // key -> tile | null
 const shownSet = new Set();      // keys shown this session (spawn de-dupe)
@@ -459,9 +459,12 @@ function paintTitle(t){
    =========================================================================== */
 async function land(){
   const seq=++landSeq;
-  clearTimeout(settleTimer); clearTimeout(loadTimeout);
+  clearTimeout(settleTimer); clearTimeout(loadTimeout); clearTimeout(revealTimer);
   room.classList.add("lit");
-  $("#screen").classList.remove("playing"); $("#screen").classList.add("buffering");
+  const ps=$("#poster"); ps.style.transition="none";        // still appears instantly — no fade-in flash
+  $("#screen").classList.remove("playing");
+  void ps.offsetWidth; ps.style.transition="";              // restore for the later crossfade to video
+  $("#screen").classList.add("buffering");
   const got=await currentPlayable();
   if(seq!==landSeq) return;                       // superseded by a newer nav
   if(!got){ $("#screen").classList.remove("buffering"); emptyTheme(); return; }
@@ -484,7 +487,11 @@ function onState(e){
   if(e.data===YT.PlayerState.PLAYING){
     skips=0; clearTimeout(loadTimeout);
     try{ player.setPlaybackQuality("hd1080"); }catch(_){}   // best-effort; YouTube ultimately picks adaptively
-    $("#screen").classList.remove("buffering"); $("#screen").classList.add("playing");
+    $("#screen").classList.remove("buffering");
+    // hold the backdrop ~300ms past PLAYING so YouTube has rendered real frames
+    // before the crossfade — kills the black "loading" flash between still and trailer.
+    clearTimeout(revealTimer);
+    revealTimer=setTimeout(()=>{ $("#screen").classList.add("playing"); }, 300);
   }
   if(e.data===YT.PlayerState.ENDED && autoAdvance){ dir=1; goTitle(1); }   // channel loop within theme
 }

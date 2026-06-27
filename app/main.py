@@ -621,7 +621,10 @@ async def because_you_watched(cap: int) -> list[dict]:
     cached = cache_get("reel:becausewatched")
     if cached is not None:
         return cached
-    watched = await trakt_watched_ids()
+    try:
+        watched = await trakt_watched_ids()
+    except Exception as e:  # noqa: BLE001 — Trakt cold/slow shouldn't sink /api/themes
+        log.warning("because-you-watched watched fetch failed: %s", e); watched = set()
     rows: list[dict] = []
     if watched:
         for tid, mt in random.sample(list(watched), min(3, len(watched))):
@@ -733,7 +736,11 @@ async def get_themes(limit: int = 10):
     # Intersperse 2-3 "Because you watched X" rows — filtered fresh against the live
     # block each pull (seeds cached 12h), woven in every ~3 generated themes (not clumped).
     byw = []
-    for row in await because_you_watched(cap):
+    try:
+        byw_rows = await because_you_watched(cap)
+    except Exception as e:  # noqa: BLE001 — personalised rows are optional; never 500 over them
+        log.warning("because-you-watched failed: %s", e); byw_rows = []
+    for row in byw_rows:
         titles = _filter(row["titles"], block)
         if titles:
             byw.append({"id": row["id"], "label": row["label"], "titles": titles})
