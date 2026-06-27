@@ -189,7 +189,6 @@ button{font-family:inherit;color:inherit;}
 
     <!-- reel position -->
     <div id="posmark">
-      <div class="pm-sub" id="pmSub">—</div>
       <div class="dots" id="pmDots"></div>
     </div>
 
@@ -347,19 +346,13 @@ function paintTitle(){
       : `<span class="src">${CHIP_SRC[k]||k}</span>`;
     return `<span class="chip">${icon}<span class="val ${rclass(k,v)}">${v}</span></span>`;
   }).join("");
-  // position marker
-  $("#pmSub").textContent=`Title ${xi+1} / ${th.titles.length}`;
+  // position marker — dots only (no "Title x/x" text)
   $("#pmDots").innerHTML=th.titles.map((_,i)=>`<i class="${i===xi?'cur':''}"></i>`).join("");
-  // poster + spill from a clean trailer FRAME-grab (hq2.jpg = a still from the video
-  // itself) — avoids the uploader's "OFFICIAL TRAILER" custom-thumbnail text.
-  // Production uses TMDB poster_url/backdrop_url (clean, high-res) instead.
-  const src=thumb(c.yt,"hq2"), fb=thumb(c.yt,"hqdefault");
-  const probe=new Image();
-  probe.onload=()=>{ $("#poster").style.backgroundImage=`url(${src})`;
-                     $("#spill").style.backgroundImage=`url(${src})`; };
-  probe.onerror=()=>{ $("#poster").style.backgroundImage=`url(${fb})`;
-                      $("#spill").style.backgroundImage=`url(${fb})`; };
-  probe.src=src;
+  // DEMO IMAGE LIMITATION: YouTube only gives sharp-but-texty (maxres custom thumb) OR
+  // clean-but-soft (frame grabs) — can't have both. Using the sharp one; the blurred
+  // spill hides its text. Production uses clean + sharp TMDB poster_url/backdrop_url.
+  $("#poster").style.backgroundImage=`url(${thumb(c.yt,"maxresdefault")})`;
+  $("#spill").style.backgroundImage=`url(${thumb(c.yt,"hqdefault")})`;
 }
 
 /* ---- load / play with debounce + skip safety --------------------------- */
