@@ -64,9 +64,7 @@ button{font-family:inherit;color:inherit;}
 #billing{position:absolute;left:0;right:0;bottom:0;z-index:4;
   padding:64px clamp(20px,5vw,72px) clamp(18px,3.4vh,34px);
   background:linear-gradient(transparent, rgba(8,7,6,.5) 38%, rgba(8,7,6,.94));
-  opacity:0;transform:translateY(8px);transition:opacity .35s ease, transform .35s ease;
-  pointer-events:none;}
-#room.chrome #billing{opacity:1;transform:none;pointer-events:auto;}
+  opacity:1;transform:none;pointer-events:auto;}   /* persistent — small enough to stay */
 
 .title-line{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;}
 .title{font-family:var(--billing);font-weight:800;text-transform:uppercase;
@@ -81,11 +79,17 @@ button{font-family:inherit;color:inherit;}
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
 
 /* ratings — disciplined, monochrome, tabular. Colour belongs to the film. */
-.ratings{display:flex;gap:18px;margin-top:14px;font-variant-numeric:tabular-nums;}
-.chip{display:flex;align-items:baseline;gap:6px;}
+.ratings{display:flex;gap:20px;margin-top:14px;font-variant-numeric:tabular-nums;}
+.chip{display:flex;align-items:center;gap:7px;}
 .chip .src{font-family:var(--display);font-weight:700;text-transform:uppercase;
   letter-spacing:.14em;font-size:10px;color:var(--ink-dim);}
-.chip .val{font-family:var(--billing);font-weight:700;font-size:21px;}
+.chip .val{font-family:var(--billing);font-weight:700;font-size:22px;color:var(--ink);}
+/* light quality tint — pale so it signals good/ok/bad without fighting the film */
+.chip .val.v-good{color:#9FD8A4;} .chip .val.v-ok{color:#ECC66B;} .chip .val.v-bad{color:#E59B86;}
+.imdb-badge{background:#F5C518;color:#0B0A09;font-family:var(--billing);font-weight:800;
+  font-size:13px;letter-spacing:.02em;padding:2px 6px;border-radius:4px;line-height:1;}
+.rt-ico{width:23px;height:23px;display:block;}
+.rt-ico.pop{width:26px;height:26px;}
 
 /* ---- icon control row --------------------------------------------------- */
 .controls{display:flex;align-items:center;gap:6px;margin-top:18px;}
@@ -110,8 +114,7 @@ button{font-family:inherit;color:inherit;}
 
 /* ---- reel-position marker (you-are-here in the programme) ---------------- */
 #posmark{position:absolute;top:clamp(16px,3vh,30px);left:clamp(20px,5vw,72px);z-index:4;
-  opacity:0;transition:opacity .35s;}
-#room.chrome #posmark{opacity:1;}
+  opacity:1;}   /* persistent */
 #posmark .pm-theme{font-family:var(--display);font-weight:700;text-transform:uppercase;
   letter-spacing:.2em;font-size:12px;color:var(--ink);}
 #posmark .pm-sub{font-family:var(--display);letter-spacing:.16em;font-size:11px;
@@ -259,8 +262,15 @@ const THEMES = [
 ];
 
 const CHIPS = ["imdb","rt_critic","rt_audience"];      // from config.toml [ratings].chips
-const CHIP_SRC = {imdb:"IMDb", rt_critic:"RT", rt_audience:"\u{1F37F}", metacritic:"MC"};
+const CHIP_SRC = {imdb:"IMDb", rt_critic:"RT", rt_audience:"POPCORN", metacritic:"MC"};
 const thumb = (yt,q="maxresdefault") => `https://img.youtube.com/vi/${yt}/${q}.jpg`;
+
+// brand-ish rating glyphs (filled SVG): RT tomato (critic) + popcorn (audience). IMDb = badge.
+const TOMATO='<circle cx="12" cy="14" r="7.5" fill="#FA320A"/><path d="M12.5 7.1c-1.1-2.6.7-4 2.9-4.2-.6 1.9.1 3.6-2.9 4.2z" fill="#57A639"/><path d="M11.7 7c-.2-1.6-1-2.4-2.2-2.8.4 1.3.5 2.2 2.2 2.8z" fill="#57A639"/>';
+const POPCORN='<path d="M6.2 9h11.6l-1.2 11.4a1 1 0 0 1-1 .9H8.4a1 1 0 0 1-1-.9z" fill="#EDE7DC"/><path d="M9 9.2l.5 11.6M12 9.2v11.6M15 9.2l-.5 11.6" stroke="#C9402F" stroke-width="1.2"/><circle cx="8.6" cy="6.7" r="2.5" fill="#F2C94C"/><circle cx="12" cy="5.3" r="2.7" fill="#F4D77E"/><circle cx="15.4" cy="6.7" r="2.5" fill="#F2C94C"/>';
+// quality tint thresholds: IMDb /10, RT %.
+function rclass(key,v){const n=parseFloat(v);const t=key==="imdb"?[7.5,6]:[75,60];
+  return n>=t[0]?"v-good":n>=t[1]?"v-ok":"v-bad";}
 
 /* ---- ICONS (inline SVG, stroke) ---------------------------------------- */
 const ICONS = {
@@ -330,8 +340,14 @@ function paintTitle(){
   $("#bTitle").textContent=c.t;
   $("#bYear").textContent=c.y;
   $("#bOverview").textContent=c.o;
-  $("#bRatings").innerHTML = CHIPS.filter(k=>c.r[k]).map(k=>
-    `<span class="chip"><span class="src">${CHIP_SRC[k]}</span><span class="val">${c.r[k]}</span></span>`).join("");
+  $("#bRatings").innerHTML = CHIPS.filter(k=>c.r[k]).map(k=>{
+    const v=c.r[k];
+    const icon = k==="imdb" ? `<span class="imdb-badge">IMDb</span>`
+      : k==="rt_critic" ? `<svg class="rt-ico" viewBox="0 0 24 24">${TOMATO}</svg>`
+      : k==="rt_audience" ? `<svg class="rt-ico pop" viewBox="0 0 24 24">${POPCORN}</svg>`
+      : `<span class="src">${CHIP_SRC[k]||k}</span>`;
+    return `<span class="chip">${icon}<span class="val ${rclass(k,v)}">${v}</span></span>`;
+  }).join("");
   // position marker
   $("#pmTheme").textContent=th.label;
   $("#pmSub").textContent=`Title ${xi+1} / ${th.titles.length}`;
@@ -346,11 +362,7 @@ function paintTitle(){
 }
 
 /* ---- load / play with debounce + skip safety --------------------------- */
-function showChrome(persist){
-  room.classList.add("chrome");
-  clearTimeout(hideChromeTimer);
-  if(!persist) hideChromeTimer=setTimeout(()=>room.classList.remove("chrome"),3200);
-}
+function showChrome(){ room.classList.add("chrome"); }   /* metadata/buttons stay put now */
 function land(){
   const c=cur();
   paintTitle(); showChrome(false);
@@ -393,16 +405,22 @@ function doAction(a){
   if(a.key==="pause"){ togglePause(); return; }
   const msgs={
     watchlist:"Added to <b>Watchlist</b>", request:"Requested on <b>Seerr</b>",
-    watched:"Marked <b>watched</b> on Trakt", hide:"Hidden — <b>not for me</b>",
-    ditch:`Ditched <b>${THEMES[ti].label}</b>`,
+    watched:"Marked <b>watched</b> — next up", hide:"<b>Not for me</b> — next up",
+    ditch:`Ditched <b>${THEMES[ti].label}</b> — next theme`,
     like:`Spawned <b>Because you liked ${cur().t}</b>`,
     director:"Spawned <b>More from the director</b>",
     cast:"Cast picker — <b>pick an actor</b> (top 10 headshots)",
   };
   toast(msgs[a.key]||a.label);
-  if(["watchlist","watched"].includes(a.key)){
-    const b=document.querySelector(`.ico[data-key="${a.key}"]`); if(b) b.classList.toggle("on");
+  // saved-for-later → confirm, fill the icon, stay on the trailer
+  if(["watchlist","request"].includes(a.key)){
+    const b=document.querySelector(`.ico[data-key="${a.key}"]`); if(b) b.classList.add("on");
+    return;
   }
+  // done-with-this → auto-advance
+  if(a.key==="watched" || a.key==="hide"){ dir=1; goTitle(1); return; }
+  if(a.key==="ditch"){ goTheme(1); return; }
+  // like/director/cast → spawn a new row + jump in (simulated here)
 }
 function togglePause(){
   if(!playerReady) return;
@@ -462,7 +480,7 @@ document.addEventListener("keydown",e=>{
 });
 // reveal chrome on mouse move / tap; cover tap toggles chrome
 document.addEventListener("mousemove",()=>{ if(started) showChrome(false); });
-$("#cover").addEventListener("click",()=>{ room.classList.toggle("chrome"); });
+$("#cover").addEventListener("click",()=>{ togglePause(); });   /* tap video = pause/play */
 
 renderControls();
 buildBoard();
