@@ -76,13 +76,13 @@ button{font-family:inherit;color:inherit;}
   letter-spacing:.22em;font-size:12px;color:var(--marquee);margin-bottom:6px;}
 .kind .dot{color:var(--ink-dim);margin:0 8px;}
 .genre{font-family:var(--display);font-weight:500;text-transform:uppercase;
-  letter-spacing:.16em;font-size:11px;color:var(--ink-dim);margin:11px 0 0;min-height:11px;}
+  letter-spacing:.16em;font-size:11px;color:var(--ink-dim);margin:8px 0 0;min-height:11px;}
 .overview{font-size:clamp(13px,1.15vw,15.5px);line-height:1.55;color:var(--ink);
-  opacity:.84;max-width:66ch;margin:10px 0 0;
+  opacity:.84;max-width:66ch;margin:7px 0 0;
   display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;}
 
 /* ratings — disciplined, monochrome, tabular. Colour belongs to the film. */
-.ratings{display:flex;gap:20px;margin-top:14px;font-variant-numeric:tabular-nums;min-height:26px;}
+.ratings{display:flex;gap:20px;margin-top:10px;font-variant-numeric:tabular-nums;min-height:26px;}
 .chip{display:flex;align-items:center;gap:7px;}
 .chip .src{font-family:var(--display);font-weight:700;text-transform:uppercase;
   letter-spacing:.14em;font-size:10px;color:var(--ink-dim);}
@@ -95,7 +95,7 @@ button{font-family:inherit;color:inherit;}
 .rt-ico.pop{width:26px;height:26px;}
 
 /* ---- icon control row --------------------------------------------------- */
-.controls{display:flex;align-items:center;gap:6px;margin-top:18px;}
+.controls{display:flex;align-items:center;gap:6px;margin-top:13px;}
 .sep{width:1px;height:26px;background:var(--hair);margin:0 8px;}
 .ico{display:grid;place-items:center;width:44px;height:44px;border-radius:10px;
   background:rgba(242,235,223,.05);border:1px solid transparent;cursor:pointer;
@@ -747,12 +747,12 @@ document.addEventListener("keydown",e=>{
 });
 $("#cover").addEventListener("click",()=>togglePause());      // tap video = pause/play
 
-/* auto-hide the chrome after ~18s idle; any mouse / tap / scroll / key brings it back */
+/* auto-hide the chrome after ~13s idle; any mouse / tap / scroll / key brings it back */
 let idleTimer=null;
 function resetIdle(){
   document.body.classList.remove("idle");
   clearTimeout(idleTimer);
-  idleTimer=setTimeout(()=>{ if(started && !boardOpen() && !picker) document.body.classList.add("idle"); }, 18000);
+  idleTimer=setTimeout(()=>{ if(started && !boardOpen() && !picker) document.body.classList.add("idle"); }, 13000);
 }
 ["mousemove","mousedown","touchstart","wheel"].forEach(ev=>document.addEventListener(ev,resetIdle,{passive:true}));
 
